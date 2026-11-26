@@ -4,7 +4,7 @@ Shopping for a household that treats its groceries as **stock**. Each shop gets 
 
 The rules this is built against are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
-> **Status:** 0.2.0. The backend (data, actions, entities) is done and tested. The dashboard card, which is the main phone UI with one-tap ✓ got / ✗ missing buttons, is next. Until it's ready, use the actions below or the standard to-do list.
+> **Status:** 0.3.0. This is the first complete version: the backend and the dashboard card. Tested automatically, but not yet on a real install.
 
 ## Install
 
@@ -13,6 +13,22 @@ The rules this is built against are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.
 **Manual:** copy `custom_components/household_shopping` into `/config/custom_components/` → restart HA.
 
 Then go to Settings → Devices & services → Add integration → **Household Shopping** and name it, for example "Shopping". It requires HA 2026.11 or newer.
+
+## The card
+
+The card is bundled with the integration and loads automatically, so you don't need to add it separately in HACS. Add it to a dashboard: **Edit dashboard → Add card → search "Household Shopping"**. In YAML that's:
+
+```yaml
+type: custom:household-shopping-card
+# entity: todo.shopping   # optional; only needed if you have more than one list
+```
+
+- **No shop:** a *New shop* button and the last shop's missing list.
+- **Planning:** tick what's run out from your stock, grouped by where it lives at home. Occasional items are in a collapsed section at the bottom. Type anything else into the add box, which suggests catalogue names. Set the store (optional), then tap *Start shopping*.
+- **Shopping:** the list is grouped by aisle. Tap **✓** for got and **✗** for missing; tap again to undo. **Long-press** an item for more: still needed, edit note, change aisle (remembered for next time), save to stock, photo, remove. *📋 Stock* adds things from the catalogue mid-shop. *Finish shop* shows the summary.
+- **Catalogue:** search, edit items (name, stock/occasional, location, aisle, note, icon), take or choose a **photo**, *Paste list* to bulk-add, and *Groups* to rename and reorder home locations and aisles.
+
+Tip: a dashboard view in **panel** or **sections** layout gives the card the full phone screen.
 
 ## Concepts
 
@@ -75,4 +91,6 @@ No cloud services and no background network calls. The only network request the 
 ```bash
 pip install -r requirements_test.txt   # Python 3.14 for current HA
 pytest -q
+# Card end-to-end test (real HA + Chromium), also writes screenshots:
+npm install --no-save playwright && HS_SCREENSHOTS=shots pytest -q tests/test_card_e2e.py
 ```

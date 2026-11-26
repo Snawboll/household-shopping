@@ -396,6 +396,12 @@ class ShoppingModel:
             shop["started"] = self._ts()
         return shop
 
+    def set_store(self, store: str | None) -> dict[str, Any]:
+        """BR-SHOP-05: optional store name; blank clears it."""
+        shop = self._require_shop()
+        shop["store"] = clean(store) or None
+        return shop
+
     def cancel_shop(self) -> None:
         """BR-SHOP-09: only a planning shop can be cancelled; no history kept."""
         shop = self._require_shop()

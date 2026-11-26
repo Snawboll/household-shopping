@@ -29,3 +29,17 @@ jobs:
         with:
           category: integration
           ignore: brands
+
+  card-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -r requirements_test.txt
+      - run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      - run: pytest -q tests/test_card_e2e.py

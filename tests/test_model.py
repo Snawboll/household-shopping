@@ -124,6 +124,8 @@ def test_icons(model):  # BR-IMG-02
     assert icons.guess_icon("Gold sweet potato") == "🍠"
     assert icons.guess_icon("WW Sour Cream 300ml") == "🥛"
     assert icons.guess_icon("Allen's Jelly Beans") == "🍬"
+    assert icons.guess_icon("Bananas") == "🍌" and icons.guess_icon("Mangoes") == "🥭"
+    assert icons.guess_icon("Apples") == "🍎" and icons.guess_icon("Pineapple pieces") == "🍍"
     odd = model.add_catalogue_item("Zzz", m.STOCK, aisle="Frozen")
     assert model.icon_for(odd) == "🧊"  # falls back to aisle icon
     model.update_catalogue_item("Zzz", icon="⭐")

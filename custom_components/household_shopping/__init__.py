@@ -9,6 +9,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
+from .frontend import async_setup_frontend
 from .images import async_remove_entry_images, async_setup_images
 from .manager import ShoppingManager
 from .services import async_setup_services
@@ -25,6 +26,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_setup_services(hass)
     async_setup_websocket(hass)
     async_setup_images(hass)
+    await async_setup_frontend(hass)
     return True
 
 

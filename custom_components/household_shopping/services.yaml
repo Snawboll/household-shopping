@@ -21,6 +21,13 @@ start_shopping:
     store:
       selector: *id002
       example: Woolworths Woden
+set_store:
+  target: *id001
+  fields:
+    store:
+      selector:
+        text: {}
+      example: Woolworths Woden
 finish_shop:
   target: *id001
 cancel_shop:

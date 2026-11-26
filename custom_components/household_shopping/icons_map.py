@@ -63,7 +63,9 @@ KEYWORD_ICONS: dict[str, str] = {
 DEFAULT_ICON = "🛒"
 
 _KEYS = sorted(KEYWORD_ICONS, key=len, reverse=True)
-_PATTERNS = [(re.compile(rf"\b{re.escape(k)}\b"), KEYWORD_ICONS[k]) for k in _KEYS]
+# Allow simple plurals: banana(s), mango(es), cherr(y/ies) are handled by
+# explicit entries where the stem changes.
+_PATTERNS = [(re.compile(rf"\b{re.escape(k)}(?:e?s)?\b"), KEYWORD_ICONS[k]) for k in _KEYS]
 
 
 def guess_icon(name: str) -> str | None:

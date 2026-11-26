@@ -37,6 +37,16 @@
         }
       }
     },
+    "set_store": {
+      "name": "Set store",
+      "description": "Set or clear the open shop's store name.",
+      "fields": {
+        "store": {
+          "name": "Store",
+          "description": "Store name; leave blank to clear."
+        }
+      }
+    },
     "finish_shop": {
       "name": "Finish shop",
       "description": "Close the shop and record what was got and what was missing.",

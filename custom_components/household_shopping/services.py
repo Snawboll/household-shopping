@@ -112,6 +112,11 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
         _sync(lambda m, d: m.start_shopping(d.get("store")) and None),
         SupportsResponse.NONE,
     ),
+    "set_store": (
+        {vol.Optional("store", default=""): vol.Any(None, cv.string)},
+        _sync(lambda m, d: m.set_store(d.get("store")) and None),
+        SupportsResponse.NONE,
+    ),
     "finish_shop": ({}, _sync(lambda m, d: m.finish_shop()), SupportsResponse.OPTIONAL),
     "cancel_shop": ({}, _sync(lambda m, d: m.cancel_shop()), SupportsResponse.NONE),
     "add_item": (

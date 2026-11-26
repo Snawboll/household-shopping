@@ -1,6 +1,9 @@
 {
   "domain": "household_shopping",
   "name": "Household Shopping",
+  "after_dependencies": [
+    "frontend"
+  ],
   "codeowners": [
     "@Snawboll"
   ],
@@ -15,5 +18,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Snawboll/household-shopping/issues",
   "requirements": [],
-  "version": "0.2.0"
+  "version": "0.3.0"
 }
