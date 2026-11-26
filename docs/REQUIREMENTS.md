@@ -1,6 +1,6 @@
 # Household Shopping: Requirements & Business Rules
 
-**Status:** DRAFT v0.6. Open questions are marked **⚠ DECIDE**.
+**Status:** v1.0, agreed. Changes from here on are made by editing this file, with a note in the commit.
 
 `MUST`, `SHOULD` and `MAY` are used as in RFC 2119. Rule IDs are referred to in tests and commits.
 
@@ -72,7 +72,7 @@ The household treats its groceries as **stock**. **Every shop has its own list.*
 | ID | Rule |
 |---|---|
 | BR-OCC-01 | An occasional item has a unique name (matched the same way as stock), an aisle, and MAY have a note. A name can't be both stock and occasional. |
-| BR-OCC-02 | ⚠ DECIDE: how occasional items are created. **(a)** Automatically: every one-off added to a shop is remembered, along with the aisle it was given. **(b)** Only by hand ("Remember this item"). |
+| BR-OCC-02 | **Created automatically.** Every one-off added to a shop is remembered as an occasional item, along with its aisle. If the item's aisle is changed later, the remembered aisle is updated too. Cleaning up is done by hand in the catalogue screen, or by asking an AI assistant to review it through `get_catalogue` / `remove_catalogue_item`. *(Owner decision.)* |
 | BR-OCC-03 | When planning, occasional items appear in a collapsed "Occasional" section of the stock check, and as suggestions when typing a new item (for example, typing "sun" suggests "Sunscreen"). Picking one adds it to the shop with its aisle. |
 | BR-OCC-04 | **Promote to stock:** one action turns an occasional item into a stock item, asking for its home location. **Demote:** a stock item can be moved back to occasional. |
 | BR-OCC-05 | Occasional items can be renamed, have their aisle changed, or be deleted. |
