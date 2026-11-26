@@ -32,6 +32,19 @@ _ENTITY_KEYS = {"entity_id", "device_id", "area_id", "floor_id", "label_id"}
 Handler = Callable[[ShoppingManager, dict[str, Any]], Any]
 
 opt_str = vol.Any(None, cv.string)
+QTY = vol.All(vol.Coerce(int), vol.Range(min=1, max=99))
+
+SHOP_ITEM = vol.Any(
+    cv.string,
+    vol.Schema(
+        {
+            vol.Required("name"): cv.string,
+            vol.Optional("qty"): QTY,
+            vol.Optional("note"): cv.string,
+            vol.Optional("aisle"): cv.string,
+        }
+    ),
+)
 
 CATALOGUE_ENTRY = vol.Schema(
     {
@@ -41,6 +54,7 @@ CATALOGUE_ENTRY = vol.Schema(
         vol.Optional("aisle"): opt_str,
         vol.Optional("note"): opt_str,
         vol.Optional("icon"): opt_str,
+        vol.Optional("qty"): vol.Any(None, QTY),
     }
 )
 GROUP_TYPE = vol.In([*GROUP_TYPES, "location", "aisle"])
@@ -103,7 +117,7 @@ async def _remove_catalogue_item(manager: ShoppingManager, d: dict[str, Any]) ->
 SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], SupportsResponse]] = {
     # ---------------------------------------------------------------- shop
     "new_shop": (
-        {vol.Optional("store"): cv.string, vol.Optional("items", default=list): [cv.string]},
+        {vol.Optional("store"): cv.string, vol.Optional("items", default=list): [SHOP_ITEM]},
         _sync(_new_shop),
         SupportsResponse.OPTIONAL,
     ),
@@ -124,8 +138,12 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
             vol.Required("name"): cv.string,
             vol.Optional("note"): cv.string,
             vol.Optional("aisle"): cv.string,
+            vol.Optional("qty"): QTY,
         },
-        _sync(lambda m, d: m.add_item(d["name"], note=d.get("note"), aisle=d.get("aisle")) and None),
+        _sync(
+            lambda m, d: m.add_item(d["name"], note=d.get("note"), aisle=d.get("aisle"), qty=d.get("qty"))
+            and None
+        ),
         SupportsResponse.NONE,
     ),
     "update_item": (
@@ -134,10 +152,11 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
             vol.Optional("name"): cv.string,
             vol.Optional("note"): cv.string,
             vol.Optional("aisle"): cv.string,
+            vol.Optional("qty"): QTY,
         },
         _sync(
             lambda m, d: m.update_item(
-                d["item"], name=d.get("name"), note=d.get("note"), aisle=d.get("aisle")
+                d["item"], name=d.get("name"), note=d.get("note"), aisle=d.get("aisle"), qty=d.get("qty")
             )
             and None
         ),
@@ -171,10 +190,11 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
             vol.Optional("aisle"): cv.string,
             vol.Optional("note"): cv.string,
             vol.Optional("icon"): cv.string,
+            vol.Optional("qty"): QTY,
         },
         _sync(
             lambda m, d: m.add_catalogue_item(
-                d["name"], STOCK, **{k: d.get(k) for k in ("location", "aisle", "note", "icon")}
+                d["name"], STOCK, **{k: d.get(k) for k in ("location", "aisle", "note", "icon", "qty")}
             )
             and None
         ),
@@ -186,10 +206,11 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
             vol.Optional("aisle"): cv.string,
             vol.Optional("note"): cv.string,
             vol.Optional("icon"): cv.string,
+            vol.Optional("qty"): QTY,
         },
         _sync(
             lambda m, d: m.add_catalogue_item(
-                d["name"], OCCASIONAL, **{k: d.get(k) for k in ("aisle", "note", "icon")}
+                d["name"], OCCASIONAL, **{k: d.get(k) for k in ("aisle", "note", "icon", "qty")}
             )
             and None
         ),
@@ -203,12 +224,13 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
             vol.Optional("aisle"): cv.string,
             vol.Optional("note"): cv.string,
             vol.Optional("icon"): cv.string,
+            vol.Optional("qty"): QTY,
         },
         _sync(
             lambda m, d: m.update_catalogue_item(
                 d["name"],
                 name=d.get("new_name"),
-                **{k: d.get(k) for k in ("location", "aisle", "note", "icon")},
+                **{k: d.get(k) for k in ("location", "aisle", "note", "icon", "qty")},
             )
             and None
         ),

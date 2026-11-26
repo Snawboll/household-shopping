@@ -11,7 +11,7 @@
  */
 
 const DOMAIN = "household_shopping";
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const LONG_PRESS_MS = 450;
 
 const esc = (v) =>
@@ -101,6 +101,13 @@ const STYLE = `
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 16px; border-radius: 8px; z-index: 20; max-width: 90vw; }
   .toast[hidden] { display: none; }
   .order button { width: 40px; height: 40px; border-radius: 8px; }
+  .qty { display: inline-block; min-width: 2.2em; padding: 1px 7px; margin-right: 6px; border-radius: 999px; text-align: center;
+         background: var(--primary-color); color: var(--text-primary-color, #fff); font-weight: 700; font-size: .85em; vertical-align: 1px; }
+  .step { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+  .step button { width: 40px; height: 40px; border-radius: 50%; background: var(--secondary-background-color); font-size: 20px; font-weight: 600; }
+  .step b { min-width: 2.2em; text-align: center; font-size: 1.05em; }
+  .step.big button { width: 52px; height: 52px; font-size: 24px; }
+  .step.big b { font-size: 1.4em; min-width: 3em; }
 `;
 
 class HouseholdShoppingCard extends HTMLElement {
@@ -250,6 +257,18 @@ class HouseholdShoppingCard extends HTMLElement {
       : `<span class="pic"${style}>${esc(item.icon || "🛒")}</span>`;
   }
 
+  _qty(item) {
+    return (item.qty || 1) > 1 ? `<span class="qty">×${item.qty}</span>` : "";
+  }
+
+  _stepper(item, big = false) {
+    return `<span class="step ${big ? "big" : ""}">
+      <button data-action="qty" data-id="${esc(item.id)}" data-delta="-1" ${(item.qty || 1) <= 1 ? "disabled" : ""} aria-label="Less">−</button>
+      <b>${item.qty || 1}</b>
+      <button data-action="qty" data-id="${esc(item.id)}" data-delta="1" aria-label="More">＋</button>
+    </span>`;
+  }
+
   _options(groups, selected) {
     return groups
       .map((g) => `<option value="${esc(g.id)}" ${g.id === selected ? "selected" : ""}>${esc(g.icon)} ${esc(g.name)}</option>`)
@@ -342,7 +361,7 @@ class HouseholdShoppingCard extends HTMLElement {
 
   _summaryPanel(s, title) {
     const pills = (list, cls = "") =>
-      list.length ? `<div class="pills">${list.map((i) => `<span class="pill ${cls}">${esc(i.name)}</span>`).join("")}</div>` : "<div class='meta'>None</div>";
+      list.length ? `<div class="pills">${list.map((i) => `<span class="pill ${cls}">${esc(i.name)}${(i.qty || 1) > 1 ? ` ×${i.qty}` : ""}</span>`).join("")}</div>` : "<div class='meta'>None</div>";
     return `<div class="panel">
       <h3>${esc(title)} · ${esc(fmtDate(s.finished))}${s.store ? ` · ${esc(s.store)}` : ""}</h3>
       <div style="font-weight:600;margin:8px 0 6px">❌ Missing (${s.missing.length})</div>${pills(s.missing, "miss")}
@@ -354,11 +373,14 @@ class HouseholdShoppingCard extends HTMLElement {
   _renderPlanning() {
     const d = this._data;
     const onList = new Set(d.shop.items.map((i) => i.catalogue_id));
+    // BR-QTY-06: once ticked, the row shows a stepper for this shop's amount.
+    const linked = (c) => d.shop.items.find((i) => i.catalogue_id === c.id && i.state === "needed") || d.shop.items.find((i) => i.catalogue_id === c.id);
     const tick = (c) => `
       <div class="row click" data-action="toggle" data-id="${esc(c.id)}" data-on="${onList.has(c.id) ? 1 : 0}">
         <span class="tick ${onList.has(c.id) ? "on" : ""}">${onList.has(c.id) ? "✓" : ""}</span>
         ${this._pic(c)}
         <div class="txt"><div class="name">${esc(c.name)}</div>${c.note ? `<div class="note">${esc(c.note)}</div>` : ""}</div>
+        ${onList.has(c.id) ? this._stepper(linked(c)) : ""}
       </div>`;
     const group = (key, title, items) => {
       const picked = items.filter((c) => onList.has(c.id)).length;
@@ -374,7 +396,7 @@ class HouseholdShoppingCard extends HTMLElement {
     html += `<div class="panel"><h3>On this shop (${items.length})</h3>${
       items.length
         ? `<div class="pills">${items
-            .map((i) => `<span class="pill ${i.state === "missing" ? "miss" : ""}">${esc(i.name)}<button data-action="remove" data-id="${esc(i.id)}" aria-label="Remove">✕</button></span>`)
+            .map((i) => `<span class="pill ${i.state === "missing" ? "miss" : ""}">${esc(i.name)}${(i.qty || 1) > 1 ? ` ×${i.qty}` : ""}<button data-action="remove" data-id="${esc(i.id)}" aria-label="Remove">✕</button></span>`)
             .join("")}</div>`
         : `<div class="meta">Tick what's run out below, or add anything else above.</div>`
     }</div>`;
@@ -400,7 +422,7 @@ class HouseholdShoppingCard extends HTMLElement {
           .map(
             (i) => `<div class="row ${i.state}" data-press="${esc(i.id)}">
             ${this._pic(i)}
-            <div class="txt"><div class="name">${esc(i.name)}</div>${i.note ? `<div class="note">${esc(i.note)}</div>` : ""}</div>
+            <div class="txt"><div class="name">${this._qty(i)}${esc(i.name)}</div>${i.note ? `<div class="note">${esc(i.note)}</div>` : ""}</div>
             <button class="act miss ${i.state === "missing" ? "on" : ""}" data-action="state" data-id="${esc(i.id)}" data-state="missing" aria-label="Missing">✗</button>
             <button class="act got ${i.state === "got" ? "on" : ""}" data-action="state" data-id="${esc(i.id)}" data-state="got" aria-label="Got">✓</button>
           </div>`
@@ -421,7 +443,7 @@ class HouseholdShoppingCard extends HTMLElement {
       <div class="row click" data-action="edit" data-id="${esc(c.id)}">
         ${this._pic(c)}
         <div class="txt"><div class="name">${esc(c.name)}</div>
-          <div class="note">${c.kind === "stock" ? `${esc(c.location_name)} · ` : "Occasional · "}${esc(c.aisle_name)}${c.note ? ` · ${esc(c.note)}` : ""}</div></div>
+          <div class="note">${c.kind === "stock" ? `${esc(c.location_name)} · ` : "Occasional · "}${esc(c.aisle_name)}${(c.qty || 1) > 1 ? ` · usually ×${c.qty}` : ""}${c.note ? ` · ${esc(c.note)}` : ""}</div></div>
         <span>›</span>
       </div>`;
     let html = `<div class="seg" style="padding:0 8px 8px">
@@ -503,6 +525,17 @@ class HouseholdShoppingCard extends HTMLElement {
         return this._call("toggle_stock", { name: this._cat(id)?.name ?? id, on: el.dataset.on !== "1" });
       case "remove":
         return this._call("remove_item", { item: id });
+      case "qty": {
+        const item = this._shopItem(id);
+        if (!item) return;
+        const qty = Math.max(1, Math.min(99, (item.qty || 1) + Number(el.dataset.delta)));
+        if (qty === (item.qty || 1)) return;
+        item.qty = qty; // optimistic, so quick taps add up
+        const b = el.parentElement.querySelector("b");
+        if (b) b.textContent = qty;
+        el.parentElement.querySelector('[data-delta="-1"]').disabled = qty <= 1;
+        return this._call("update_item", { item: id, qty });
+      }
       case "state": {
         const item = this._shopItem(id);
         const next = item.state === el.dataset.state ? "needed" : el.dataset.state;
@@ -684,7 +717,10 @@ class HouseholdShoppingCard extends HTMLElement {
       `<button data-action="${action}" data-id="${id}" ${extra}><span style="width:28px;text-align:center">${icon}</span>${label}</button>`;
     const isStock = item.kind === "stock";
     this._openSheet(`
-      <div class="photo">${this._pic(item)}<div><h2>${esc(item.name)}</h2><div class="sub">${esc(item.aisle_name)}${item.note ? ` · ${esc(item.note)}` : ""}</div></div></div>
+      <div class="photo">${this._pic(item)}<div><h2>${this._qty(item)}${esc(item.name)}</h2><div class="sub">${esc(item.aisle_name)}${item.note ? ` · ${esc(item.note)}` : ""}</div></div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px">
+        <span>Quantity</span>${this._stepper(item, true)}
+      </div>
       <div class="menu">
         ${item.state !== "got" ? opt("sheet-state", "✓", "Got it", 'data-state="got"') : ""}
         ${item.state !== "missing" ? opt("sheet-state", "✗", "Missing at this shop", 'data-state="missing"') : ""}
@@ -764,6 +800,7 @@ class HouseholdShoppingCard extends HTMLElement {
       <div id="f-loc-wrap" ${it.kind === "stock" ? "" : "hidden"}><label>Home location</label><select id="f-loc">${this._options(d.locations, it.location)}</select></div>
       <label>Aisle</label><select id="f-aisle">${this._options(d.aisles, it.aisle)}</select>
       <label>Note (brand, size…)</label><input id="f-note" value="${esc(it.note)}">
+      <label>Usual quantity (added when you tick it)</label><input id="f-qty" type="number" inputmode="numeric" min="1" max="99" value="${esc(it.qty || 1)}">
       <label>Icon (emoji, blank = automatic${isNew ? "" : `: ${esc(it.icon)}`})</label><input id="f-icon" value="${esc(icon)}" maxlength="8">
       <div class="row2">
         ${isNew ? "" : `<button class="btn danger" data-action="delete-item" data-name="${esc(it.name)}">Delete</button>`}
@@ -777,7 +814,8 @@ class HouseholdShoppingCard extends HTMLElement {
     const kind = $("[data-action=set-kind].on")?.dataset.kind || "stock";
     const name = $("#f-name").value.trim();
     if (!name) return this._toast("A name is required");
-    const fields = { aisle: $("#f-aisle").value, note: $("#f-note").value.trim(), icon: $("#f-icon").value.trim() };
+    const qty = Math.max(1, Math.min(99, parseInt($("#f-qty").value, 10) || 1));
+    const fields = { aisle: $("#f-aisle").value, note: $("#f-note").value.trim(), icon: $("#f-icon").value.trim(), qty };
     if (kind === "stock") fields.location = $("#f-loc").value;
     let ok;
     if (el.dataset.new === "1") {

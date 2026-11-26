@@ -11,7 +11,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, STORAGE_MINOR_VERSION, STORAGE_VERSION
-from .model import ShoppingError, ShoppingModel, default_data
+from .model import ShoppingError, ShoppingModel, default_data, normalise
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -44,7 +44,7 @@ class ShoppingManager:
         data = default_data()
         if stored:
             data.update(stored)
-        self.model.data = data
+        self.model.data = normalise(data)
 
     async def async_save(self) -> None:
         await self._store.async_save(self.model.data)

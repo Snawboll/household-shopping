@@ -10,11 +10,11 @@ new_shop:
       example: Woolworths Woden
     items:
       selector:
-        text:
-          multiple: true
+        object: {}
       example:
       - Milk
-      - Eggs
+      - name: Bananas
+        qty: 5
 start_shopping:
   target: *id001
   fields:
@@ -45,6 +45,13 @@ add_item:
     aisle:
       selector: *id002
       example: Dairy & Eggs
+    qty:
+      selector: &id003
+        number:
+          min: 1
+          max: 99
+          mode: box
+      example: 2
 update_item:
   target: *id001
   fields:
@@ -58,6 +65,9 @@ update_item:
       selector: *id002
     aisle:
       selector: *id002
+    qty:
+      selector: *id003
+      example: 2
 set_item_state:
   target: *id001
   fields:
@@ -119,6 +129,9 @@ add_stock_item:
     icon:
       selector: *id002
       example: 🥛
+    qty:
+      selector: *id003
+      example: 2
 add_occasional_item:
   target: *id001
   fields:
@@ -133,6 +146,9 @@ add_occasional_item:
       selector: *id002
     icon:
       selector: *id002
+    qty:
+      selector: *id003
+      example: 2
 update_catalogue_item:
   target: *id001
   fields:
@@ -150,6 +166,9 @@ update_catalogue_item:
       selector: *id002
     icon:
       selector: *id002
+    qty:
+      selector: *id003
+      example: 2
 promote_to_stock:
   target: *id001
   fields:
@@ -234,7 +253,7 @@ add_group:
   target: *id001
   fields:
     type:
-      selector: &id003
+      selector: &id004
         select:
           options:
           - location
@@ -251,7 +270,7 @@ update_group:
   target: *id001
   fields:
     type:
-      selector: *id003
+      selector: *id004
       required: true
     group:
       selector: *id002
@@ -265,7 +284,7 @@ remove_group:
   target: *id001
   fields:
     type:
-      selector: *id003
+      selector: *id004
       required: true
     group:
       selector: *id002
@@ -275,7 +294,7 @@ order_groups:
   target: *id001
   fields:
     type:
-      selector: *id003
+      selector: *id004
       required: true
     groups:
       selector:

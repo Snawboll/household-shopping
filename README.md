@@ -4,7 +4,7 @@ Shopping for a household that treats its groceries as **stock**. Each shop gets 
 
 The rules this is built against are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
-> **Status:** 0.3.0. This is the first complete version: the backend and the dashboard card. Tested automatically, but not yet on a real install.
+> **Status:** 0.4.0. Adds quantities, and the card now registers itself as a dashboard resource.
 
 ## Install
 
@@ -16,7 +16,7 @@ Then go to Settings → Devices & services → Add integration → **Household S
 
 ## The card
 
-The card is bundled with the integration and loads automatically, so you don't need to add it separately in HACS. Add it to a dashboard: **Edit dashboard → Add card → search "Household Shopping"**. In YAML that's:
+The card is bundled with the integration and registers itself as a dashboard resource, so you don't need to install it separately. After an update, refresh the browser or app once. Add it to a dashboard: **Edit dashboard → Add card → search "Household Shopping"**. In YAML that's:
 
 ```yaml
 type: custom:household-shopping-card
@@ -24,8 +24,8 @@ type: custom:household-shopping-card
 ```
 
 - **No shop:** a *New shop* button and the last shop's missing list.
-- **Planning:** tick what's run out from your stock, grouped by where it lives at home. Occasional items are in a collapsed section at the bottom. Type anything else into the add box, which suggests catalogue names. Set the store (optional), then tap *Start shopping*.
-- **Shopping:** the list is grouped by aisle. Tap **✓** for got and **✗** for missing; tap again to undo. **Long-press** an item for more: still needed, edit note, change aisle (remembered for next time), save to stock, photo, remove. *📋 Stock* adds things from the catalogue mid-shop. *Finish shop* shows the summary.
+- **Planning:** tick what's run out from your stock (a −/＋ stepper appears to set how many), grouped by where it lives at home. Occasional items are in a collapsed section at the bottom. Type anything else into the add box, which suggests catalogue names. Set the store (optional), then tap *Start shopping*.
+- **Shopping:** the list is grouped by aisle. Tap **✓** for got and **✗** for missing; tap again to undo. Quantities over 1 show as a **×5** badge. **Long-press** an item for more: still needed, edit note, change aisle (remembered for next time), save to stock, photo, remove. *📋 Stock* adds things from the catalogue mid-shop. *Finish shop* shows the summary.
 - **Catalogue:** search, edit items (name, stock/occasional, location, aisle, note, icon), take or choose a **photo**, *Paste list* to bulk-add, and *Groups* to rename and reorder home locations and aisles.
 
 Tip: a dashboard view in **panel** or **sections** layout gives the card the full phone screen.
@@ -52,7 +52,7 @@ Home locations and aisles come with sensible defaults, and you can rename and re
 
 All of these target `todo.shopping`.
 
-**Shop:** `new_shop(store?, items?)` · `start_shopping(store?)` · `finish_shop` (returns the summary) · `cancel_shop` · `add_item(name, note?, aisle?)` · `update_item` · `set_item_state(item, needed|got|missing)` · `remove_item` · `toggle_stock(name, on)` · `get_history(limit)`
+**Shop:** `new_shop(store?, items?)` (items: names or `{name, qty, note}`) · `start_shopping(store?)` · `finish_shop` (returns the summary) · `cancel_shop` · `add_item(name, note?, aisle?, qty?)` · `update_item` · `set_item_state(item, needed|got|missing)` · `remove_item` · `toggle_stock(name, on)` · `get_history(limit)`
 
 **Catalogue:** `add_stock_item(name, location?, aisle?, note?, icon?)` · `add_occasional_item` · `update_catalogue_item` · `promote_to_stock` · `demote_to_occasional` · `remove_catalogue_item` · `import_catalogue(items)` (bulk, all or nothing) · `get_catalogue` (returns everything) · `set_item_image(name, image_url | image_data, source, attribution?)` · `clear_item_image`
 

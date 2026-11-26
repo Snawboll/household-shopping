@@ -9,7 +9,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
-from .frontend import async_setup_frontend
+from .frontend import async_remove_card_resource, async_setup_frontend
 from .images import async_remove_entry_images, async_setup_images
 from .manager import ShoppingManager
 from .services import async_setup_services
@@ -47,3 +47,6 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """NFR-08: removing the integration deletes its data and photos."""
     await ShoppingManager.async_remove_store(hass, entry.entry_id)
     await async_remove_entry_images(hass, entry.entry_id)
+    others = [e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id != entry.entry_id]
+    if not others:
+        await async_remove_card_resource(hass)

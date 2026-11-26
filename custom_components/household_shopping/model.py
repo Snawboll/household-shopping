@@ -36,6 +36,7 @@ GROUP_TYPES = (LOCATIONS, AISLES)
 
 OTHER_ID = "other"
 MAX_HISTORY = 100
+MAX_QTY = 99
 
 IMAGE_SOURCES = ("own", "openfoodfacts", "other")
 
@@ -76,6 +77,34 @@ DEFAULT_AISLES = [
 
 class ShoppingError(Exception):
     """A request that breaks a business rule. The message is shown to the user."""
+
+
+def check_qty(qty: Any) -> int:
+    """BR-QTY-01: a whole number from 1 to 99."""
+    if isinstance(qty, float) and qty.is_integer():
+        value = int(qty)
+    elif isinstance(qty, str) and qty.strip().isdigit():
+        value = int(qty)
+    elif isinstance(qty, int) and not isinstance(qty, bool):
+        value = qty
+    else:
+        raise ShoppingError("Quantity must be a whole number")
+    if not 1 <= value <= MAX_QTY:
+        raise ShoppingError(f"Quantity must be between 1 and {MAX_QTY}")
+    return value
+
+
+def normalise(data: dict[str, Any]) -> dict[str, Any]:
+    """Fill fields added in later versions so older stored data keeps working."""
+    for entry in data.get("catalogue", []):
+        entry.setdefault("qty", 1)
+    for item in (data.get("shop") or {}).get("items", []):
+        item.setdefault("qty", 1)
+    for record in data.get("history", []):
+        for key in ("missing", "got", "not_got"):
+            for entry in record.get(key, []):
+                entry.setdefault("qty", 1)
+    return data
 
 
 def norm(text: str | None) -> str:
@@ -235,6 +264,7 @@ class ShoppingModel:
         aisle: str | None = None,
         note: str | None = None,
         icon: str | None = None,
+        qty: int | None = None,
     ) -> dict[str, Any]:
         name = clean(name)
         if not name:
@@ -254,6 +284,7 @@ class ShoppingModel:
             "aisle": self.group_id(AISLES, aisle),
             "note": clean(note),
             "icon": icon or None,
+            "qty": check_qty(qty) if qty is not None else 1,  # BR-QTY-02 usual amount
             "image": None,
             "created": self._ts(),
         }
@@ -269,6 +300,7 @@ class ShoppingModel:
         aisle: str | None = None,
         note: str | None = None,
         icon: str | None = None,
+        qty: int | None = None,
     ) -> dict[str, Any]:
         """BR-STOCK-02: changing the catalogue never touches the open shop."""
         item = self.get_catalogue_item(ref)
@@ -288,6 +320,8 @@ class ShoppingModel:
             item["note"] = clean(note)
         if icon is not None:
             item["icon"] = icon or None
+        if qty is not None:
+            item["qty"] = check_qty(qty)
         return item
 
     def set_kind(self, ref: str, kind: str, location: str | None = None) -> dict[str, Any]:
@@ -328,7 +362,7 @@ class ShoppingModel:
         try:
             for entry in entries:
                 name = clean(entry.get("name"))
-                fields = {k: entry.get(k) for k in ("location", "aisle", "note", "icon")}
+                fields = {k: entry.get(k) for k in ("location", "aisle", "note", "icon", "qty")}
                 if existing := self.find_catalogue(name):
                     self.update_catalogue_item(
                         existing["id"], **{k: v for k, v in fields.items() if v is not None}
@@ -417,7 +451,8 @@ class ShoppingModel:
 
         def entries(state: str) -> list[dict[str, Any]]:
             return [
-                {"name": i["name"], "catalogue_id": i.get("catalogue_id")}  # BR-HIST-03
+                # BR-HIST-03, BR-QTY-04
+                {"name": i["name"], "qty": i.get("qty", 1), "catalogue_id": i.get("catalogue_id")}
                 for i in shop["items"]
                 if i["state"] == state
             ]
@@ -458,6 +493,7 @@ class ShoppingModel:
         *,
         note: str | None = None,
         aisle: str | None = None,
+        qty: int | None = None,
         remember: bool = True,
     ) -> dict[str, Any]:
         """BR-ITEM-01..04. Creates a shop if none is open (BR-SHOP-02).
@@ -469,6 +505,7 @@ class ShoppingModel:
         if not name:
             raise ShoppingError("A name is required")
         aisle_id = self.group_id(AISLES, aisle) if aisle else None
+        qty = check_qty(qty) if qty is not None else None
         if self.shop is None:
             self.new_shop()
         entry = self.find_catalogue(name)
@@ -480,6 +517,8 @@ class ShoppingModel:
             "note": clean(note) if note is not None else (entry or {}).get("note", ""),
             "aisle": aisle_id or (entry or {}).get("aisle") or OTHER_ID,
             "catalogue_id": entry["id"] if entry else None,
+            # BR-QTY-02: given amount, else the catalogue's usual amount, else 1.
+            "qty": qty or (entry or {}).get("qty") or 1,
             "state": NEEDED,
             "state_at": None,
             "added": self._ts(),
@@ -487,8 +526,23 @@ class ShoppingModel:
         self.shop["items"].append(item)  # BR-ITEM-02: duplicates allowed
         return item
 
-    def add_items(self, names: list[str]) -> list[dict[str, Any]]:
-        return [self.add_item(n) for n in names if clean(n)]
+    def add_items(self, entries: list[str | dict[str, Any]]) -> list[dict[str, Any]]:
+        """Add several items; each is a name or {name, qty?, note?, aisle?}."""
+        out = []
+        for entry in entries:
+            if isinstance(entry, str):
+                if clean(entry):
+                    out.append(self.add_item(entry))
+                continue
+            out.append(
+                self.add_item(
+                    entry.get("name", ""),
+                    note=entry.get("note"),
+                    aisle=entry.get("aisle"),
+                    qty=entry.get("qty"),
+                )
+            )
+        return out
 
     def update_item(
         self,
@@ -497,8 +551,11 @@ class ShoppingModel:
         name: str | None = None,
         note: str | None = None,
         aisle: str | None = None,
+        qty: int | None = None,
     ) -> dict[str, Any]:
         item = self.find_item(ref)
+        if qty is not None:
+            item["qty"] = check_qty(qty)  # BR-QTY-03: the shop's amount only
         if name is not None:
             if not clean(name):
                 raise ShoppingError("A name is required")
@@ -618,7 +675,14 @@ class ShoppingModel:
             "catalogue": [self.describe_catalogue_item(c) for c in self.catalogue],
             "stock_check": self.stock_check(),
             "shop": (
-                {**self.shop, "by_aisle": self.shop_by_aisle()} if self.shop else None
+                {
+                    **self.shop,
+                    # Items carry their catalogue details (icon, photo, kind).
+                    "items": [self.describe_shop_item(i) for i in self.shop["items"]],
+                    "by_aisle": self.shop_by_aisle(),
+                }
+                if self.shop
+                else None
             ),
             "last_shop": self.data["history"][-1] if self.data["history"] else None,
         }

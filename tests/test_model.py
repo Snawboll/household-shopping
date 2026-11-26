@@ -290,3 +290,55 @@ def test_remove_catalogue_unlinks_shop_items(model):
     item = model.add_item("Milk")
     model.remove_catalogue_item("Milk")
     assert item["catalogue_id"] is None
+
+
+# ---------------------------------------------------------------- quantities
+
+def test_qty_defaults_and_validation(model):  # BR-QTY-01/02
+    item = model.add_item("Milk")
+    assert item["qty"] == 1
+    stock(model, "Bananas", qty=5)
+    assert model.add_item("Bananas")["qty"] == 5  # usual amount
+    assert model.add_item("bananas", qty=2)["qty"] == 2  # explicit wins
+    for bad in (0, 100, 2.5, "two", True, [2]):
+        with pytest.raises(m.ShoppingError):
+            model.add_item("Eggs", qty=bad)
+
+
+def test_qty_change_is_shop_only(model):  # BR-QTY-03
+    entry = stock(model, "Milk", qty=2)
+    item = model.add_item("Milk")
+    model.update_item(item["id"], qty=4)
+    assert item["qty"] == 4 and entry["qty"] == 2
+    model.update_catalogue_item("Milk", qty=3)
+    assert item["qty"] == 4 and entry["qty"] == 3
+
+
+def test_qty_in_summary(model):  # BR-QTY-04
+    model.add_items(["Bread", {"name": "Bananas", "qty": 5}])
+    model.start_shopping()
+    model.set_item_state("Bananas", m.MISSING)
+    record = model.finish_shop()
+    assert record["missing"][0]["qty"] == 5 and record["not_got"][0]["qty"] == 1
+
+
+def test_toggle_stock_uses_usual_qty(model):  # BR-QTY-02, BR-ITEM-03
+    stock(model, "Yoghurt", qty=7)
+    model.toggle_stock("Yoghurt", True)
+    assert model.shop["items"][0]["qty"] == 7
+
+
+def test_import_sets_qty(model):  # BR-QTY-02
+    model.import_catalogue([{"name": "Milk", "kind": "stock", "qty": 2}])
+    assert model.get_catalogue_item("Milk")["qty"] == 2
+
+
+def test_normalise_old_data():  # NFR-02
+    old = m.default_data()
+    old["catalogue"].append({"id": "a", "name": "Milk", "kind": "stock", "location": "fridge", "aisle": "dairy_eggs", "note": "", "icon": None, "image": None})
+    old["shop"] = {"id": "s", "store": None, "state": "planning", "created": "x", "started": None,
+                   "items": [{"id": "i", "name": "Milk", "note": "", "aisle": "dairy_eggs", "catalogue_id": "a", "state": "needed", "state_at": None, "added": "x"}]}
+    old["history"].append({"missing": [{"name": "Eggs", "catalogue_id": None}], "got": [], "not_got": []})
+    data = m.normalise(old)
+    assert data["catalogue"][0]["qty"] == 1 and data["shop"]["items"][0]["qty"] == 1
+    assert data["history"][0]["missing"][0]["qty"] == 1

@@ -57,6 +57,11 @@ const [base, token, out, cardJs] = process.argv.slice(2);
     await card.locator(`[data-action=toggle]:has-text("${name}")`).click();
     await page.waitForTimeout(150);
   }
+  // Quantity stepper on a ticked stock row (BR-QTY-06).
+  const plus = card.locator(`[data-action=toggle]:has-text("Full cream milk") [data-delta="1"]`);
+  await plus.click();
+  await plus.click();
+  await expect(/Full cream milk ×3/, "qty 3 in list pills");
   await card.locator("#add").fill("Birthday candles");
   await card.locator("#add").press("Enter");
   await expect(/On this shop \(7\)/, "7 on list");
@@ -67,11 +72,13 @@ const [base, token, out, cardJs] = process.argv.slice(2);
   await click("[data-action=save-store-real]");
   await expect(/Woolworths Woden/, "store set");
 
+  const row = (name) => card.locator(`[data-press]:has-text("${name}")`);
   await click("[data-action=start]");
   await expect(/left/, "shopping view");
   await shot("3-shopping");
+  const badge = await row("Full cream milk").locator(".qty").textContent();
+  if (badge.trim() !== "×3") throw new Error(`qty badge was ${badge}`);
 
-  const row = (name) => card.locator(`[data-press]:has-text("${name}")`);
   await row("Full cream milk").locator("[data-state=got]").click();
   await row("Bananas").locator("[data-state=got]").click();
   await row("Tasty cheese").locator("[data-state=missing]").click();
@@ -85,6 +92,11 @@ const [base, token, out, cardJs] = process.argv.slice(2);
   await page.waitForTimeout(700);
   await page.mouse.up();
   await expect(/Change aisle/, "long-press menu");
+  // Stock item: menu shows its icon and doesn't offer "Save to stock".
+  const menuText = await card.locator("#dlg").textContent();
+  if (/Save to stock/.test(menuText) || !/🥦/.test(menuText)) throw new Error("menu lost catalogue details");
+  await card.locator('#dlg [data-delta="1"]').click();
+  await page.waitForTimeout(300);
   await shot("5-long-press");
   await click("[data-action=sheet-state][data-state=missing]");
   await expect(/missing/, "broccoli missing");

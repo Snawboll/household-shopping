@@ -151,3 +151,49 @@ async def test_remove_entry_deletes_data(hass, entry):  # NFR-08
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}").async_load() is None
+
+
+async def test_quantities_end_to_end(hass, entry):  # BR-QTY-*
+    await call(hass, "add_stock_item", name="Bananas", location="Fruit bowl", aisle="Fruit & Veg", qty=5)
+    await call(hass, "new_shop", items=["Bread", {"name": "Milk", "qty": 2, "note": "3L"}])
+    await call(hass, "toggle_stock", name="Bananas", on=True)
+    await call(hass, "update_item", item="Bread", qty=3)
+    items = (await hass.services.async_call(
+        "todo", "get_items", {"entity_id": TODO}, blocking=True, return_response=True
+    ))[TODO]["items"]
+    by_name = {i["summary"]: i for i in items}
+    assert by_name["Milk"]["description"] == "×2 · 3L"
+    assert by_name["Bananas"]["description"].startswith("×5")
+    assert by_name["Bread"]["description"] == "×3"
+    # Editing the note in HA's own to-do UI keeps the quantity.
+    await hass.services.async_call(
+        "todo", "update_item", {"entity_id": TODO, "item": "Milk", "description": "×2 · Dairy Farmers"}, blocking=True
+    )
+    shop = snapshot(await call(hass, "get_catalogue", response=True))["shop"]
+    milk = next(i for i in shop["items"] if i["name"] == "Milk")
+    assert milk["qty"] == 2 and milk["note"] == "Dairy Farmers"
+    with pytest.raises(Exception):
+        await call(hass, "update_item", item="Milk", qty=0)
+
+
+async def test_card_registered_as_dashboard_resource(hass, entry):  # §7.1
+    from homeassistant.components.lovelace.const import LOVELACE_DATA
+    from homeassistant.setup import async_setup_component
+
+    from custom_components.household_shopping.frontend import (
+        CARD_URL,
+        async_register_card_resource,
+        async_remove_card_resource,
+    )
+
+    assert await async_setup_component(hass, "lovelace", {})
+    resources = hass.data[LOVELACE_DATA].resources
+    await resources.async_get_info()
+    # A stale entry (as added by hand) plus a duplicate.
+    await resources.async_create_item({"res_type": "module", "url": f"{CARD_URL}?v=0.3.0"})
+    await resources.async_create_item({"res_type": "module", "url": CARD_URL})
+    assert await async_register_card_resource(hass, f"{CARD_URL}?v=9.9.9")
+    ours = [r for r in resources.async_items() if r["url"].startswith(CARD_URL)]
+    assert [r["url"] for r in ours] == [f"{CARD_URL}?v=9.9.9"]
+    await async_remove_card_resource(hass)
+    assert not [r for r in resources.async_items() if r["url"].startswith(CARD_URL)]

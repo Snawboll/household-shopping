@@ -1,6 +1,6 @@
 # Household Shopping: Requirements & Business Rules
 
-**Status:** v1.1, agreed (v1.1 adds images and receipt import). Changes from here on are made by editing this file, with a note in the commit.
+**Status:** v1.2, agreed (v1.1 adds images and receipt import; v1.2 adds quantities). Changes from here on are made by editing this file, with a note in the commit.
 
 `MUST`, `SHOULD` and `MAY` are used as in RFC 2119. Rule IDs are referred to in tests and commits.
 
@@ -130,6 +130,20 @@ The integration itself doesn't read receipts. Reading a receipt is done by an AI
 | BR-ITEM-08 | While shopping, items are **grouped by aisle** in aisle order, in the order added within each aisle. Items that are done drop to the bottom of their aisle. |
 | BR-ITEM-09 | Every change reaches all devices within seconds and survives an HA restart. |
 
+## 5a. Quantities
+
+*(Owner decision, v1.2: "Quantities is important". Added after the first real shop, where about a quarter of the list was multiples.)*
+
+| ID | Rule |
+|---|---|
+| BR-QTY-01 | Every shop item has a quantity, a whole number from 1 to 99. The default is 1. |
+| BR-QTY-02 | Every catalogue item has a **usual quantity** (default 1). An item added from the catalogue (by ticking it, Assist, a service or an import) starts at its usual quantity unless a quantity is given. |
+| BR-QTY-03 | Changing a shop item's quantity only affects that shop. The usual quantity changes only through the catalogue. |
+| BR-QTY-04 | Shop summaries and history record each item's quantity. |
+| BR-QTY-05 | In HA's standard to-do list, a quantity over 1 shows at the start of the description ("×5 · Cavendish"). Editing the description there keeps the quantity. |
+| BR-QTY-06 | In the card, a ticked stock item shows a −/＋ stepper; while shopping, a quantity over 1 shows as a "×5" badge before the name; the long-press menu has a stepper. |
+| BR-QTY-07 | *(Later)* Partly got, e.g. 3 of 5 bananas. For now an item is got or missing as a whole; note the shortfall in the note. |
+
 ## 6. History
 
 | ID | Rule |
@@ -160,7 +174,7 @@ HA's to-do entities have only two states (`needs_action` and `completed`), and t
 | `sensor.<name>_shop` | `none` / `planning` / `shopping`, with attributes for store, counts and the last summary. |
 
 ### 7.4 Services
-Shops: `new_shop(store?, items?)`, `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `add_item(name, aisle?, note?)`, `set_item_state(item, state)`, `get_history(limit)`.
+Shops: `new_shop(store?, items?)` (items are names or `{name, qty, note, aisle}`), `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `add_item(name, aisle?, note?, qty?)`, `set_item_state(item, state)`, `get_history(limit)`.
 
 Catalogue: `add_stock_item(name, location?, aisle?, note?, icon?)`, `add_occasional_item(name, aisle?, note?)`, `update_catalogue_item(name, new_name?, location?, aisle?, note?)`, `promote_to_stock(name, location?)`, `demote_to_occasional(name)`, `remove_catalogue_item(name)`, `import_catalogue(items, kind)` for bulk loading, `set_item_image(name, image_url? | image_data?, source?, attribution?)`, `clear_item_image(name)`, and `get_catalogue()` (returns data, including whether each item has a photo).
 

@@ -7,6 +7,8 @@ adding an item (e.g. via Assist) opens a new shop (BR-SHOP-02).
 
 from __future__ import annotations
 
+import re
+
 from homeassistant.components.todo import (
     TodoItem,
     TodoItemStatus,
@@ -30,18 +32,27 @@ async def async_setup_entry(
     async_add_entities([ShopTodoEntity(entry.runtime_data, entry)])
 
 
+_QTY_PREFIX = re.compile(r"^×\s*\d+\s*·?\s*")
+
+
 def _description(item: dict) -> str | None:
-    note = item.get("note") or ""
+    """e.g. "❌ Missing · ×5 · Cavendish" (BR-QTY-05)."""
+    parts = []
     if item["state"] == MISSING:
-        return f"{MISSING_LABEL} · {note}" if note else MISSING_LABEL
-    return note or None
+        parts.append(MISSING_LABEL)
+    if item.get("qty", 1) > 1:
+        parts.append(f"×{item['qty']}")
+    if item.get("note"):
+        parts.append(item["note"])
+    return " · ".join(parts) or None
 
 
 def _note_from(description: str | None) -> str:
+    """Recover the note from an edited description, dropping our own labels."""
     text = (description or "").strip()
     if text.startswith(MISSING_LABEL):
         text = text[len(MISSING_LABEL):].lstrip(" ·").strip()
-    return text
+    return _QTY_PREFIX.sub("", text).strip()
 
 
 class ShopTodoEntity(ShoppingEntity, TodoListEntity):
