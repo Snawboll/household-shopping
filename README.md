@@ -1,67 +1,78 @@
 # Household Shopping
 
-A shared shopping list for Home Assistant, with a standard (staples) list, shop tracking and "unavailable" items. It's local, with no cloud account, and syncs to everyone through the HA Companion app.
+Shopping for a household that treats its groceries as **stock**. Each shop gets its own list. You build it by going through your stock (grouped by where things live at home), shop it aisle by aisle, mark anything the shop didn't have as **missing**, and get a summary at the end. It all runs locally in Home Assistant.
+
+The rules this is built against are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
+
+> **Status:** 0.2.0. The backend (data, actions, entities) is done and tested. The dashboard card, which is the main phone UI with one-tap ✓ got / ✗ missing buttons, is next. Until it's ready, use the actions below or the standard to-do list.
 
 ## Install
 
-**HACS (recommended):** HACS → ⋮ → Custom repositories → add `https://github.com/Snawboll/household-shopping` as type *Integration* → download → restart HA.
+**HACS:** HACS → ⋮ → Custom repositories → add `https://github.com/Snawboll/household-shopping` as type *Integration* → download → restart HA.
 
-**Manual:** copy `custom_components/household_shopping` into `/config/custom_components/` (via the Samba or File editor add-on) → restart HA.
+**Manual:** copy `custom_components/household_shopping` into `/config/custom_components/` → restart HA.
 
-Then go to Settings → Devices & services → Add integration → **Household Shopping** and name it (for example "Shopping"). Requires HA 2024.8 or newer.
+Then go to Settings → Devices & services → Add integration → **Household Shopping** and name it, for example "Shopping". It requires HA 2026.11 or newer.
 
-## What you get (for a list named "Shopping")
+## Concepts
+
+| | |
+|---|---|
+| **Stock** | Things you always keep at home. Each one has a **home location** (Fridge, Pantry…) and an **aisle** (Dairy & Eggs, Frozen…). |
+| **Occasional** | Things you buy sometimes. These are remembered automatically whenever you add something new to a shop. They can be promoted to stock. |
+| **Shop** | One trip, with its own list: `planning` → `shopping` → finished. Only one shop is open at a time. |
+| **Item state** | `needed`, `got` or `missing`. |
+
+Home locations and aisles come with sensible defaults, and you can rename and reorder them all. Each item gets an automatic emoji icon. You can attach a photo to any catalogue item.
+
+## Entities (for a list named "Shopping")
 
 | Entity | Purpose |
 |---|---|
-| `todo.shopping` | The shared list. Appears under To-do lists in the sidebar and works with Assist ("add milk to shopping"). |
-| `todo.shopping_staples` | Your standard list. **Ticking a staple adds it to the shopping list**, and the staple stays put. |
-| `sensor.shopping_trip` | `idle` / `shopping`. Attributes: store, started, bought_so_far, unavailable_now, last_trip, trips_recorded. |
+| `todo.shopping` | The open shop as a normal to-do list. It works with Assist ("add milk to shopping"), which opens a shop if none is open. Missing items show as "❌ Missing". |
+| `sensor.shopping_shop` | `none` / `planning` / `shopping`, with attributes for the store, counts, `missing_items` and the last shop's missing items. |
 
-## Day to day
+## Actions
 
-- **Standard list:** run *Add staples* to load everything onto the list at once, or tick individual staples.
-- **Unavailable:** in the app, open an item and type `na` (or `out`, `oos`, `unavailable`) as its description. It becomes "Unavailable at Coles (27 Nov)" and stays on the list for next time. Ticking it later clears the flag, and so does replacing the description.
-- **Tracking a shop:** ticking the first item (or marking one unavailable) starts a trip automatically. Run *Finish shop* to record what was bought, what was unavailable and what was left, and to clear the ticked items. History keeps the last 100 trips.
+All of these target `todo.shopping`.
 
-## Services
+**Shop:** `new_shop(store?, items?)` · `start_shopping(store?)` · `finish_shop` (returns the summary) · `cancel_shop` · `add_item(name, note?, aisle?)` · `update_item` · `set_item_state(item, needed|got|missing)` · `remove_item` · `toggle_stock(name, on)` · `get_history(limit)`
 
-All of them target `todo.shopping` (or the staples entity, which does the same thing).
+**Catalogue:** `add_stock_item(name, location?, aisle?, note?, icon?)` · `add_occasional_item` · `update_catalogue_item` · `promote_to_stock` · `demote_to_occasional` · `remove_catalogue_item` · `import_catalogue(items)` (bulk, all or nothing) · `get_catalogue` (returns everything) · `set_item_image(name, image_url | image_data, source, attribution?)` · `clear_item_image`
 
-`add_staples` · `add_to_staples(item)` · `start_shop(store?)` · `finish_shop(store?, clear_bought=true)` · `mark_unavailable(item, store?)` · `clear_unavailable(item?)` · `get_history(limit=10)` (returns data)
+**Groups:** `add_group` · `update_group` · `remove_group` · `order_groups` (the type is `location` or `aisle`)
 
-Events: `household_shopping_trip_finished`, `household_shopping_item_unavailable`.
+**Events:** `household_shopping_shop_finished` (with the full summary) and `household_shopping_item_missing`.
 
-## Example: start and finish by location
+## Example: send the missing list to everyone's phone
 
 ```yaml
 automation:
-  - alias: Shop starts at Coles
+  - alias: Shop finished - tell the house what was missing
     triggers:
-      - trigger: zone
-        entity_id: person.elijah
-        zone: zone.coles
-        event: enter
-    actions:
-      - action: household_shopping.start_shop
-        target: { entity_id: todo.shopping }
-        data: { store: Coles }
-  - alias: Shop ends leaving Coles
-    triggers:
-      - trigger: zone
-        entity_id: person.elijah
-        zone: zone.coles
-        event: leave
+      - trigger: event
+        event_type: household_shopping_shop_finished
     conditions:
-      - condition: state
-        entity_id: sensor.shopping_trip
-        state: shopping
+      - condition: template
+        value_template: "{{ trigger.event.data.missing | count > 0 }}"
     actions:
-      - action: household_shopping.finish_shop
-        target: { entity_id: todo.shopping }
+      - action: notify.notify
+        data:
+          title: "Missing from {{ trigger.event.data.store or 'the shop' }}"
+          message: "{{ trigger.event.data.missing | map(attribute='name') | join(', ') }}"
 ```
 
-## Known limits
+## Receipts → catalogue (with an AI assistant)
 
-- HA's to-do card only has two states (to do / done), so "unavailable" shows in the item's description rather than as a third state.
-- Trips start automatically but don't end automatically. Finish them with the service, a dashboard button, or the zone automation above.
+The integration doesn't read receipts itself. An assistant connected to your HA, such as Claude through the HA MCP server, can do it. It reads a receipt photo or an eReceipt PDF, matches the lines against `get_catalogue`, shows you a table to approve, then calls `import_catalogue` and optionally `set_item_image`. See BR-RCPT in the requirements.
+
+## Privacy & network
+
+No cloud services and no background network calls. The only network request the integration ever makes is when `set_item_image` is given an `image_url`. Photos are stored in `/config/household_shopping_images/` (which is included in backups) and are deleted when you delete the item or remove the integration.
+
+## Development
+
+```bash
+pip install -r requirements_test.txt   # Python 3.14 for current HA
+pytest -q
+```

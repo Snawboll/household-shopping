@@ -3,51 +3,388 @@
     "step": {
       "user": {
         "title": "New shopping list",
-        "data": { "name": "List name" }
+        "data": {
+          "name": "List name"
+        }
       }
     },
-    "abort": { "already_configured": "A list with that name already exists." }
+    "abort": {
+      "already_configured": "A list with that name already exists."
+    }
   },
   "services": {
-    "add_staples": {
-      "name": "Add staples",
-      "description": "Add every staple that isn't already on the shopping list."
+    "new_shop": {
+      "name": "New shop",
+      "description": "Open a new, empty shop, optionally with items.",
+      "fields": {
+        "store": {
+          "name": "Store",
+          "description": "Store"
+        },
+        "items": {
+          "name": "Items",
+          "description": "Items"
+        }
+      }
     },
-    "add_to_staples": {
-      "name": "Add to staples",
-      "description": "Save an item to the standard list.",
-      "fields": { "item": { "name": "Item", "description": "Item name." } }
-    },
-    "start_shop": {
-      "name": "Start shop",
-      "description": "Start tracking a shopping trip.",
-      "fields": { "store": { "name": "Store", "description": "Where you're shopping." } }
+    "start_shopping": {
+      "name": "Start shopping",
+      "description": "Move the open shop from planning to shopping.",
+      "fields": {
+        "store": {
+          "name": "Store",
+          "description": "Store"
+        }
+      }
     },
     "finish_shop": {
       "name": "Finish shop",
-      "description": "Record the trip (bought, unavailable, remaining) and clear ticked items.",
+      "description": "Close the shop and record what was got and what was missing.",
+      "fields": {}
+    },
+    "cancel_shop": {
+      "name": "Cancel shop",
+      "description": "Delete a shop that's still being planned.",
+      "fields": {}
+    },
+    "add_item": {
+      "name": "Add item",
+      "description": "Add an item to the open shop (opens one if needed).",
       "fields": {
-        "store": { "name": "Store", "description": "Overrides the store set at the start." },
-        "clear_bought": { "name": "Clear bought items", "description": "Remove ticked items from the list." }
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note"
+        },
+        "aisle": {
+          "name": "Aisle",
+          "description": "Aisle"
+        }
       }
     },
-    "mark_unavailable": {
-      "name": "Mark unavailable",
-      "description": "Flag an item as unavailable. It stays on the list for next time.",
+    "update_item": {
+      "name": "Update item",
+      "description": "Change an item on the open shop.",
       "fields": {
-        "item": { "name": "Item", "description": "Item name (added if not on the list)." },
-        "store": { "name": "Store", "description": "Where it was unavailable." }
+        "item": {
+          "name": "Item",
+          "description": "Item"
+        },
+        "name": {
+          "name": "New name",
+          "description": "New name"
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note"
+        },
+        "aisle": {
+          "name": "Aisle",
+          "description": "Aisle"
+        }
       }
     },
-    "clear_unavailable": {
-      "name": "Clear unavailable",
-      "description": "Remove the unavailable flag from one item, or from all items.",
-      "fields": { "item": { "name": "Item", "description": "Leave empty to clear all." } }
+    "set_item_state": {
+      "name": "Set item state",
+      "description": "Mark an item as needed, got or missing.",
+      "fields": {
+        "item": {
+          "name": "Item",
+          "description": "Item"
+        },
+        "state": {
+          "name": "State",
+          "description": "State"
+        }
+      }
+    },
+    "remove_item": {
+      "name": "Remove item",
+      "description": "Remove an item from the open shop.",
+      "fields": {
+        "item": {
+          "name": "Item",
+          "description": "Item"
+        }
+      }
+    },
+    "toggle_stock": {
+      "name": "Toggle stock item",
+      "description": "Add (on) or remove (off) a stock item on the open shop.",
+      "fields": {
+        "name": {
+          "name": "Stock item",
+          "description": "Stock item"
+        },
+        "on": {
+          "name": "On the list",
+          "description": "On the list"
+        }
+      }
     },
     "get_history": {
-      "name": "Get trip history",
-      "description": "Return recent shopping trips, newest first.",
-      "fields": { "limit": { "name": "Limit", "description": "How many trips." } }
+      "name": "Get history",
+      "description": "Return recent finished shops, newest first.",
+      "fields": {
+        "limit": {
+          "name": "Limit",
+          "description": "Limit"
+        }
+      }
+    },
+    "add_stock_item": {
+      "name": "Add stock item",
+      "description": "Add something the household keeps in stock.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        },
+        "location": {
+          "name": "Home location",
+          "description": "Home location"
+        },
+        "aisle": {
+          "name": "Aisle",
+          "description": "Aisle"
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note"
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "Icon"
+        }
+      }
+    },
+    "add_occasional_item": {
+      "name": "Add occasional item",
+      "description": "Remember an item that isn't stock.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        },
+        "aisle": {
+          "name": "Aisle",
+          "description": "Aisle"
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note"
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "Icon"
+        }
+      }
+    },
+    "update_catalogue_item": {
+      "name": "Update catalogue item",
+      "description": "Change a stock or occasional item.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        },
+        "new_name": {
+          "name": "New name",
+          "description": "New name"
+        },
+        "location": {
+          "name": "Home location",
+          "description": "Home location"
+        },
+        "aisle": {
+          "name": "Aisle",
+          "description": "Aisle"
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note"
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "Icon"
+        }
+      }
+    },
+    "promote_to_stock": {
+      "name": "Promote to stock",
+      "description": "Turn an occasional item into a stock item.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        },
+        "location": {
+          "name": "Home location",
+          "description": "Home location"
+        }
+      }
+    },
+    "demote_to_occasional": {
+      "name": "Demote to occasional",
+      "description": "Turn a stock item into an occasional item.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        }
+      }
+    },
+    "remove_catalogue_item": {
+      "name": "Remove catalogue item",
+      "description": "Delete a stock or occasional item and its photo.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        }
+      }
+    },
+    "import_catalogue": {
+      "name": "Import catalogue",
+      "description": "Add or update many catalogue items at once. All or nothing.",
+      "fields": {
+        "items": {
+          "name": "Items",
+          "description": "Items"
+        },
+        "kind": {
+          "name": "Default kind",
+          "description": "Default kind"
+        }
+      }
+    },
+    "get_catalogue": {
+      "name": "Get catalogue",
+      "description": "Return groups, catalogue, open shop and last summary.",
+      "fields": {}
+    },
+    "set_item_image": {
+      "name": "Set item photo",
+      "description": "Attach a photo to a catalogue item from a URL or base64 data.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        },
+        "image_url": {
+          "name": "Image URL",
+          "description": "Image URL"
+        },
+        "image_data": {
+          "name": "Image data (base64)",
+          "description": "Image data (base64)"
+        },
+        "source": {
+          "name": "Source",
+          "description": "Source"
+        },
+        "attribution": {
+          "name": "Attribution",
+          "description": "Attribution"
+        },
+        "force": {
+          "name": "Replace own photo",
+          "description": "Replace own photo"
+        }
+      }
+    },
+    "clear_item_image": {
+      "name": "Clear item photo",
+      "description": "Remove a catalogue item's photo.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        }
+      }
+    },
+    "add_group": {
+      "name": "Add group",
+      "description": "Add a home location or aisle.",
+      "fields": {
+        "type": {
+          "name": "Type",
+          "description": "Type"
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name"
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "Icon"
+        }
+      }
+    },
+    "update_group": {
+      "name": "Update group",
+      "description": "Rename a home location or aisle, or change its icon.",
+      "fields": {
+        "type": {
+          "name": "Type",
+          "description": "Type"
+        },
+        "group": {
+          "name": "Group",
+          "description": "Group"
+        },
+        "name": {
+          "name": "New name",
+          "description": "New name"
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "Icon"
+        }
+      }
+    },
+    "remove_group": {
+      "name": "Remove group",
+      "description": "Delete a home location or aisle; its items move to Other.",
+      "fields": {
+        "type": {
+          "name": "Type",
+          "description": "Type"
+        },
+        "group": {
+          "name": "Group",
+          "description": "Group"
+        }
+      }
+    },
+    "order_groups": {
+      "name": "Order groups",
+      "description": "Set the order of home locations or aisles.",
+      "fields": {
+        "type": {
+          "name": "Type",
+          "description": "Type"
+        },
+        "groups": {
+          "name": "Groups in order",
+          "description": "Groups in order"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "shop": {
+        "name": "Shop",
+        "state": {
+          "none": "No shop",
+          "planning": "Planning",
+          "shopping": "Shopping"
+        }
+      }
     }
   }
 }

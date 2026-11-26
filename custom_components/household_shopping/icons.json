@@ -1,0 +1,92 @@
+{
+  "entity": {
+    "sensor": {
+      "shop": {
+        "default": "mdi:cart-outline",
+        "state": {
+          "shopping": "mdi:cart-arrow-right",
+          "planning": "mdi:clipboard-list-outline"
+        }
+      }
+    },
+    "todo": {
+      "shop": {
+        "default": "mdi:cart"
+      }
+    }
+  },
+  "services": {
+    "new_shop": {
+      "service": "mdi:cart"
+    },
+    "start_shopping": {
+      "service": "mdi:cart"
+    },
+    "finish_shop": {
+      "service": "mdi:cart"
+    },
+    "cancel_shop": {
+      "service": "mdi:cart"
+    },
+    "add_item": {
+      "service": "mdi:cart"
+    },
+    "update_item": {
+      "service": "mdi:cart"
+    },
+    "set_item_state": {
+      "service": "mdi:cart"
+    },
+    "remove_item": {
+      "service": "mdi:cart"
+    },
+    "toggle_stock": {
+      "service": "mdi:cart"
+    },
+    "get_history": {
+      "service": "mdi:cart"
+    },
+    "add_stock_item": {
+      "service": "mdi:cart"
+    },
+    "add_occasional_item": {
+      "service": "mdi:cart"
+    },
+    "update_catalogue_item": {
+      "service": "mdi:cart"
+    },
+    "promote_to_stock": {
+      "service": "mdi:cart"
+    },
+    "demote_to_occasional": {
+      "service": "mdi:cart"
+    },
+    "remove_catalogue_item": {
+      "service": "mdi:cart"
+    },
+    "import_catalogue": {
+      "service": "mdi:cart"
+    },
+    "get_catalogue": {
+      "service": "mdi:cart"
+    },
+    "set_item_image": {
+      "service": "mdi:cart"
+    },
+    "clear_item_image": {
+      "service": "mdi:cart"
+    },
+    "add_group": {
+      "service": "mdi:cart"
+    },
+    "update_group": {
+      "service": "mdi:cart"
+    },
+    "remove_group": {
+      "service": "mdi:cart"
+    },
+    "order_groups": {
+      "service": "mdi:cart"
+    }
+  }
+}

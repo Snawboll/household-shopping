@@ -1,83 +1,280 @@
-add_staples:
-  target:
-    entity:
-      integration: household_shopping
-      domain: todo
-
-add_to_staples:
-  target:
-    entity:
-      integration: household_shopping
-      domain: todo
-  fields:
-    item:
-      required: true
-      example: "Milk"
-      selector:
-        text:
-
-start_shop:
-  target:
+new_shop:
+  target: &id001
     entity:
       integration: household_shopping
       domain: todo
   fields:
     store:
-      example: "Coles Queanbeyan"
+      selector: &id002
+        text: {}
+      example: Woolworths Woden
+    items:
       selector:
         text:
-
+          multiple: true
+      example:
+      - Milk
+      - Eggs
+start_shopping:
+  target: *id001
+  fields:
+    store:
+      selector: *id002
+      example: Woolworths Woden
 finish_shop:
-  target:
-    entity:
-      integration: household_shopping
-      domain: todo
+  target: *id001
+cancel_shop:
+  target: *id001
+add_item:
+  target: *id001
   fields:
-    store:
-      example: "Coles Queanbeyan"
-      selector:
-        text:
-    clear_bought:
-      default: true
-      selector:
-        boolean:
-
-mark_unavailable:
-  target:
-    entity:
-      integration: household_shopping
-      domain: todo
-  fields:
-    item:
+    name:
+      selector: *id002
       required: true
-      example: "Oat milk"
-      selector:
-        text:
-    store:
-      example: "Coles Queanbeyan"
-      selector:
-        text:
-
-clear_unavailable:
-  target:
-    entity:
-      integration: household_shopping
-      domain: todo
+      example: Milk
+    note:
+      selector: *id002
+      example: Dairy Farmers 3L
+    aisle:
+      selector: *id002
+      example: Dairy & Eggs
+update_item:
+  target: *id001
   fields:
     item:
-      example: "Oat milk"
+      selector: *id002
+      required: true
+      example: Milk
+    name:
+      selector: *id002
+    note:
+      selector: *id002
+    aisle:
+      selector: *id002
+set_item_state:
+  target: *id001
+  fields:
+    item:
+      selector: *id002
+      required: true
+      example: Eggs
+    state:
       selector:
-        text:
-
+        select:
+          options:
+          - needed
+          - got
+          - missing
+      required: true
+remove_item:
+  target: *id001
+  fields:
+    item:
+      selector: *id002
+      required: true
+      example: Milk
+toggle_stock:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Milk
+    'on':
+      selector:
+        boolean: {}
+      required: true
 get_history:
-  target:
-    entity:
-      integration: household_shopping
-      domain: todo
+  target: *id001
   fields:
     limit:
-      default: 10
       selector:
         number:
           min: 1
           max: 100
+      default: 10
+add_stock_item:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Full cream milk
+    location:
+      selector: *id002
+      example: Fridge
+    aisle:
+      selector: *id002
+      example: Dairy & Eggs
+    note:
+      selector: *id002
+      example: Dairy Farmers 3L
+    icon:
+      selector: *id002
+      example: 🥛
+add_occasional_item:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Sunscreen
+    aisle:
+      selector: *id002
+      example: Health & Beauty
+    note:
+      selector: *id002
+    icon:
+      selector: *id002
+update_catalogue_item:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Milk
+    new_name:
+      selector: *id002
+    location:
+      selector: *id002
+    aisle:
+      selector: *id002
+    note:
+      selector: *id002
+    icon:
+      selector: *id002
+promote_to_stock:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Sunscreen
+    location:
+      selector: *id002
+      example: Bathroom
+demote_to_occasional:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Sunscreen
+remove_catalogue_item:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Sunscreen
+import_catalogue:
+  target: *id001
+  fields:
+    items:
+      selector:
+        object: {}
+      required: true
+      example:
+      - name: Full cream milk
+        kind: stock
+        location: Fridge
+        aisle: Dairy & Eggs
+        note: Dairy Farmers 3L
+    kind:
+      selector:
+        select:
+          options:
+          - stock
+          - occasional
+      default: occasional
+get_catalogue:
+  target: *id001
+set_item_image:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Milk
+    image_url:
+      selector: *id002
+    image_data:
+      selector:
+        text:
+          multiline: true
+    source:
+      selector:
+        select:
+          options:
+          - own
+          - openfoodfacts
+          - other
+      default: other
+    attribution:
+      selector: *id002
+    force:
+      selector:
+        boolean: {}
+      default: false
+clear_item_image:
+  target: *id001
+  fields:
+    name:
+      selector: *id002
+      required: true
+      example: Milk
+add_group:
+  target: *id001
+  fields:
+    type:
+      selector: &id003
+        select:
+          options:
+          - location
+          - aisle
+      required: true
+    name:
+      selector: *id002
+      required: true
+      example: Garage
+    icon:
+      selector: *id002
+      example: 🚗
+update_group:
+  target: *id001
+  fields:
+    type:
+      selector: *id003
+      required: true
+    group:
+      selector: *id002
+      required: true
+      example: Garage
+    name:
+      selector: *id002
+    icon:
+      selector: *id002
+remove_group:
+  target: *id001
+  fields:
+    type:
+      selector: *id003
+      required: true
+    group:
+      selector: *id002
+      required: true
+      example: Garage
+order_groups:
+  target: *id001
+  fields:
+    type:
+      selector: *id003
+      required: true
+    groups:
+      selector:
+        text:
+          multiple: true
+      required: true
+      example:
+      - Fruit & Veg
+      - Bakery

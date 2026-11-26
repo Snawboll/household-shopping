@@ -1,4 +1,4 @@
-"""Trip sensor: whether a shop is underway, plus the last trip's summary."""
+"""Shop sensor: none / planning / shopping, plus counts and the last summary (§7.3)."""
 
 from __future__ import annotations
 
@@ -6,44 +6,51 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ShoppingConfigEntry
 from .entity import ShoppingEntity
+from .model import GOT, MISSING, NEEDED
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ShoppingConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    async_add_entities([TripSensor(entry.runtime_data, entry)])
+    async_add_entities([ShopSensor(entry.runtime_data, entry)])
 
 
-class TripSensor(ShoppingEntity, SensorEntity):
-    """idle / shopping, with trip details as attributes."""
-
-    _attr_name = "Trip"
-    _attr_icon = "mdi:cart-arrow-right"
+class ShopSensor(ShoppingEntity, SensorEntity):
+    _attr_translation_key = "shop"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["idle", "shopping"]
+    _attr_options = ["none", "planning", "shopping"]
 
     def __init__(self, manager, entry) -> None:
-        super().__init__(manager, entry, "trip")
+        super().__init__(manager, entry, "shop")
 
     @property
     def native_value(self) -> str:
-        return "shopping" if self._manager.active_trip else "idle"
+        shop = self.model.shop
+        return shop["state"] if shop else "none"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        trip = self._manager.active_trip or {}
-        history = self._manager.history
+        shop = self.model.shop or {}
+        items = shop.get("items", [])
+
+        def names(state: str) -> list[str]:
+            return [i["name"] for i in items if i["state"] == state]
+
+        history = self.model.data["history"]
+        last = history[-1] if history else None
         return {
-            "store": trip.get("store"),
-            "started": trip.get("started"),
-            "bought_so_far": self._manager.bought_this_trip(),
-            "unavailable_now": [i["summary"] for i in self._manager.unavailable_items],
-            "last_trip": history[-1] if history else None,
-            "trips_recorded": len(history),
+            "store": shop.get("store"),
+            "created": shop.get("created"),
+            "started": shop.get("started"),
+            "needed": len(names(NEEDED)),
+            "got": len(names(GOT)),
+            "missing_items": names(MISSING),
+            "last_shop_finished": last and last["finished"],
+            "last_shop_missing": last and [i["name"] for i in last["missing"]],
         }
