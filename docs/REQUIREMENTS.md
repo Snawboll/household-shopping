@@ -1,6 +1,6 @@
 # Household Shopping: Requirements & Business Rules
 
-**Status:** v1.0, agreed. Changes from here on are made by editing this file, with a note in the commit.
+**Status:** v1.1, agreed (v1.1 adds images and receipt import). Changes from here on are made by editing this file, with a note in the commit.
 
 `MUST`, `SHOULD` and `MAY` are used as in RFC 2119. Rule IDs are referred to in tests and commits.
 
@@ -78,6 +78,30 @@ The household treats its groceries as **stock**. **Every shop has its own list.*
 | BR-OCC-05 | Occasional items can be renamed, have their aisle changed, or be deleted. |
 | BR-OCC-06 | *(Later)* Suggest a promotion when an occasional item appears in, say, 3 of the last 5 shops: "You buy this most shops. Add to stock?" |
 
+## 3b. Images & icons
+
+| ID | Rule |
+|---|---|
+| BR-IMG-01 | Every catalogue item (stock or occasional) MAY have a **photo** and has an **icon** (an emoji). Shop items show the photo of their catalogue item if it has one, otherwise the icon. |
+| BR-IMG-02 | **Icons are automatic:** guessed from the item name using a built-in keyword list (milk → 🥛), falling back to the aisle's icon. The user can change an icon. |
+| BR-IMG-03 | **Photos** can be added from the card (phone camera or gallery) or through the `set_item_image` service, given either an image URL or image data. |
+| BR-IMG-04 | Images are resized to at most 512 px on the long side, stored locally in HA, and included in backups. Deleting a catalogue item deletes its photo. |
+| BR-IMG-05 | Each photo records where it came from (`own`, `openfoodfacts` or `other`) and any attribution text. Open Food Facts images are licensed CC BY-SA, so the attribution MUST be shown in the item's details. |
+| BR-IMG-06 | Priority: the user's own photo > a sourced photo > the icon. A sourced photo never replaces the user's own photo. |
+
+## 3c. Receipt import (AI-assisted)
+
+The integration itself doesn't read receipts. Reading a receipt is done by an AI assistant connected to HA, such as Claude through the HA MCP server, using the integration's services. This keeps the integration local and simple. *(Owner request.)*
+
+| ID | Rule |
+|---|---|
+| BR-RCPT-01 | The user shares a receipt (a photo of a paper receipt or a PDF eReceipt, for example from Woolworths Everyday Rewards) with the assistant. |
+| BR-RCPT-02 | The assistant reads the lines, expands abbreviations ("WW FR RANGE EGGS 12PK" → "Free range eggs", note "Woolworths 12 pack"), ignores non-product lines (bags, discounts, totals), and fetches the catalogue with `get_catalogue`. |
+| BR-RCPT-03 | The assistant proposes a table **before changing anything**: matched existing items (filling in brand and size notes where they're missing) and new items with a suggested name, kind (occasional by default), aisle, home location and icon. |
+| BR-RCPT-04 | Once the user approves (and edits if they want), the assistant applies the changes with `import_catalogue` / `update_catalogue_item`. Nothing is written without approval. |
+| BR-RCPT-05 | For items with no photo, the assistant MAY look for a product image (Open Food Facts first) and attach it with `set_item_image`, recording the source and attribution (BR-IMG-05). Images from retailer websites are not used by default. |
+| BR-RCPT-06 | *(Later)* Reconcile a receipt against the most recent shop: items bought but not ticked, and items ticked but not on the receipt. |
+
 ## 4. Shops
 
 | ID | Rule |
@@ -138,7 +162,7 @@ HA's to-do entities have only two states (`needs_action` and `completed`), and t
 ### 7.4 Services
 Shops: `new_shop(store?, items?)`, `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `add_item(name, aisle?, note?)`, `set_item_state(item, state)`, `get_history(limit)`.
 
-Catalogue: `add_stock_item(name, location?, aisle?, note?)`, `add_occasional_item(name, aisle?, note?)`, `update_catalogue_item(name, new_name?, location?, aisle?, note?)`, `promote_to_stock(name, location?)`, `demote_to_occasional(name)`, `remove_catalogue_item(name)`, `import_catalogue(items, kind)` for bulk loading, and `get_catalogue()` (returns data).
+Catalogue: `add_stock_item(name, location?, aisle?, note?, icon?)`, `add_occasional_item(name, aisle?, note?)`, `update_catalogue_item(name, new_name?, location?, aisle?, note?)`, `promote_to_stock(name, location?)`, `demote_to_occasional(name)`, `remove_catalogue_item(name)`, `import_catalogue(items, kind)` for bulk loading, `set_item_image(name, image_url? | image_data?, source?, attribution?)`, `clear_item_image(name)`, and `get_catalogue()` (returns data, including whether each item has a photo).
 
 With these services an AI assistant connected to HA (for example Claude through the HA MCP server) can build the stock list and create shops. Invalid calls, such as finishing with no shop open or naming an unknown item, raise a `ServiceValidationError` with a clear message.
 
@@ -150,7 +174,7 @@ With these services an AI assistant connected to HA (for example Claude through 
 ## 8. Non-functional requirements
 | ID | Requirement |
 |---|---|
-| NFR-01 | Local only. No network calls. |
+| NFR-01 | Local only. The integration makes no background or scheduled network calls. The one exception is that `set_item_image` with a URL fetches that single image when asked. |
 | NFR-02 | Data is stored in versioned HA `.storage`, with migrations, and is included in HA backups. |
 | NFR-03 | Minimum HA version: set to whatever the owner's instance is running (to be checked before release). |
 | NFR-04 | Passes hassfest and HACS validation in CI. |
