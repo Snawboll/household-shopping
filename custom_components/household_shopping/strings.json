@@ -1,0 +1,53 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "New shopping list",
+        "data": { "name": "List name" }
+      }
+    },
+    "abort": { "already_configured": "A list with that name already exists." }
+  },
+  "services": {
+    "add_staples": {
+      "name": "Add staples",
+      "description": "Add every staple that isn't already on the shopping list."
+    },
+    "add_to_staples": {
+      "name": "Add to staples",
+      "description": "Save an item to the standard list.",
+      "fields": { "item": { "name": "Item", "description": "Item name." } }
+    },
+    "start_shop": {
+      "name": "Start shop",
+      "description": "Start tracking a shopping trip.",
+      "fields": { "store": { "name": "Store", "description": "Where you're shopping." } }
+    },
+    "finish_shop": {
+      "name": "Finish shop",
+      "description": "Record the trip (bought, unavailable, remaining) and clear ticked items.",
+      "fields": {
+        "store": { "name": "Store", "description": "Overrides the store set at the start." },
+        "clear_bought": { "name": "Clear bought items", "description": "Remove ticked items from the list." }
+      }
+    },
+    "mark_unavailable": {
+      "name": "Mark unavailable",
+      "description": "Flag an item as unavailable. It stays on the list for next time.",
+      "fields": {
+        "item": { "name": "Item", "description": "Item name (added if not on the list)." },
+        "store": { "name": "Store", "description": "Where it was unavailable." }
+      }
+    },
+    "clear_unavailable": {
+      "name": "Clear unavailable",
+      "description": "Remove the unavailable flag from one item, or from all items.",
+      "fields": { "item": { "name": "Item", "description": "Leave empty to clear all." } }
+    },
+    "get_history": {
+      "name": "Get trip history",
+      "description": "Return recent shopping trips, newest first.",
+      "fields": { "limit": { "name": "Limit", "description": "How many trips." } }
+    }
+  }
+}

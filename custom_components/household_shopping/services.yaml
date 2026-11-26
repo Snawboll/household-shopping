@@ -1,0 +1,83 @@
+add_staples:
+  target:
+    entity:
+      integration: household_shopping
+      domain: todo
+
+add_to_staples:
+  target:
+    entity:
+      integration: household_shopping
+      domain: todo
+  fields:
+    item:
+      required: true
+      example: "Milk"
+      selector:
+        text:
+
+start_shop:
+  target:
+    entity:
+      integration: household_shopping
+      domain: todo
+  fields:
+    store:
+      example: "Coles Queanbeyan"
+      selector:
+        text:
+
+finish_shop:
+  target:
+    entity:
+      integration: household_shopping
+      domain: todo
+  fields:
+    store:
+      example: "Coles Queanbeyan"
+      selector:
+        text:
+    clear_bought:
+      default: true
+      selector:
+        boolean:
+
+mark_unavailable:
+  target:
+    entity:
+      integration: household_shopping
+      domain: todo
+  fields:
+    item:
+      required: true
+      example: "Oat milk"
+      selector:
+        text:
+    store:
+      example: "Coles Queanbeyan"
+      selector:
+        text:
+
+clear_unavailable:
+  target:
+    entity:
+      integration: household_shopping
+      domain: todo
+  fields:
+    item:
+      example: "Oat milk"
+      selector:
+        text:
+
+get_history:
+  target:
+    entity:
+      integration: household_shopping
+      domain: todo
+  fields:
+    limit:
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100

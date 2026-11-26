@@ -1,0 +1,17 @@
+{
+  "domain": "household_shopping",
+  "name": "Household Shopping",
+  "codeowners": [
+    "@Snawboll"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "todo"
+  ],
+  "documentation": "https://github.com/Snawboll/household-shopping",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/Snawboll/household-shopping/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
