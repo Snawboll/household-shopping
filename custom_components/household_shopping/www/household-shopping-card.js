@@ -11,7 +11,7 @@
  */
 
 const DOMAIN = "household_shopping";
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 const LONG_PRESS_MS = 450;
 // Actions that work on one open shop: the card sends the one being viewed (BR-QUICK-04).
 const SHOP_SCOPED = new Set(["add_cash_out", 
