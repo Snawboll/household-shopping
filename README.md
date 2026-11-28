@@ -4,7 +4,7 @@ Shopping for a household that treats its groceries as **stock**. Each shop gets 
 
 The rules this is built against are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
-> **Status:** 0.4.0. Adds quantities, and the card now registers itself as a dashboard resource.
+> **Status:** 0.5.0. Adds a History tab with "Shop again", discarding a shop mid-shop, and tap-to-open item menus.
 
 ## Install
 
@@ -25,7 +25,8 @@ type: custom:household-shopping-card
 
 - **No shop:** a *New shop* button and the last shop's missing list.
 - **Planning:** tick what's run out from your stock (a −/＋ stepper appears to set how many), grouped by where it lives at home. Occasional items are in a collapsed section at the bottom. Type anything else into the add box, which suggests catalogue names. Set the store (optional), then tap *Start shopping*.
-- **Shopping:** the list is grouped by aisle. Tap **✓** for got and **✗** for missing; tap again to undo. Quantities over 1 show as a **×5** badge. **Long-press** an item for more: still needed, edit note, change aisle (remembered for next time), save to stock, photo, remove. *📋 Stock* adds things from the catalogue mid-shop. *Finish shop* shows the summary.
+- **Shopping:** the list is grouped by aisle. Tap **✓** for got and **✗** for missing; tap again to undo. Quantities over 1 show as a **×5** badge. **Tap (or long-press)** an item for more: still needed, edit note, change aisle (remembered for next time), save to stock, photo, remove. *📋 Stock* adds things from the catalogue mid-shop. *Finish shop* shows the summary; **✕** discards the shop without saving it.
+- **History:** every finished shop, newest first. Tap one to see what was missing, not got and got, or to **Shop again** with the same items.
 - **Catalogue:** search, edit items (name, stock/occasional, location, aisle, note, icon), take or choose a **photo**, *Paste list* to bulk-add, and *Groups* to rename and reorder home locations and aisles.
 
 Tip: a dashboard view in **panel** or **sections** layout gives the card the full phone screen.
@@ -52,7 +53,7 @@ Home locations and aisles come with sensible defaults, and you can rename and re
 
 All of these target `todo.shopping`.
 
-**Shop:** `new_shop(store?, items?)` (items: names or `{name, qty, note}`) · `start_shopping(store?)` · `finish_shop` (returns the summary) · `cancel_shop` · `add_item(name, note?, aisle?, qty?)` · `update_item` · `set_item_state(item, needed|got|missing)` · `remove_item` · `toggle_stock(name, on)` · `get_history(limit)`
+**Shop:** `new_shop(store?, items?)` (items: names or `{name, qty, note}`) · `start_shopping(store?)` · `finish_shop` (returns the summary) · `cancel_shop` (planning or shopping) · `repeat_shop(shop_id)` · `add_item(name, note?, aisle?, qty?)` · `update_item` · `set_item_state(item, needed|got|missing)` · `remove_item` · `toggle_stock(name, on)` · `get_history(limit)`
 
 **Catalogue:** `add_stock_item(name, location?, aisle?, note?, icon?)` · `add_occasional_item` · `update_catalogue_item` · `promote_to_stock` · `demote_to_occasional` · `remove_catalogue_item` · `import_catalogue(items)` (bulk, all or nothing) · `get_catalogue` (returns everything) · `set_item_image(name, image_url | image_data, source, attribution?)` · `clear_item_image`
 

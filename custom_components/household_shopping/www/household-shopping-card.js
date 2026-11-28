@@ -11,7 +11,7 @@
  */
 
 const DOMAIN = "household_shopping";
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 const LONG_PRESS_MS = 450;
 
 const esc = (v) =>
@@ -36,7 +36,7 @@ const STYLE = `
   .chip.shopping { background: var(--primary-color); color: var(--text-primary-color, #fff); }
   .chip.planning { background: var(--warning-color, #f59e0b); color: #000; }
   .tabs { display: flex; gap: 4px; padding: 4px 16px 8px; }
-  .tab { flex: 1; padding: 10px; border-radius: 10px; background: var(--secondary-background-color); font-weight: 500; min-height: 44px; }
+  .tab { flex: 1; padding: 10px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 10px; background: var(--secondary-background-color); font-weight: 500; min-height: 44px; }
   .tab.on { background: var(--primary-color); color: var(--text-primary-color, #fff); }
   .bar { display: flex; gap: 8px; padding: 0 16px 8px; }
   .bar:empty { display: none; }
@@ -44,6 +44,7 @@ const STYLE = `
   .bar select { width: auto; max-width: 40%; }
   .btn { min-height: 44px; padding: 0 16px; border-radius: 10px; background: var(--secondary-background-color); font-weight: 500; }
   .btn.primary { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+  .btn:disabled { opacity: .45; cursor: default; }
   .btn.danger { color: var(--error-color, #db4437); }
   .btn { white-space: nowrap; }
   .btn.big { width: 100%; min-height: 52px; font-size: 1.05em; }
@@ -219,6 +220,7 @@ class HouseholdShoppingCard extends HTMLElement {
     const prev = this._data;
     this._data = data;
     // BR-SHOP-07: show the summary on the device that sees the shop close.
+    if (data.last_shop?.id !== prev?.last_shop?.id && this._tab === "history") this._loadHistory();
     if (prev?.shop && !data.shop && data.last_shop?.id === prev.shop.id) {
       this._tab = "shop";
       this._showSummary(data.last_shop);
@@ -293,6 +295,7 @@ class HouseholdShoppingCard extends HTMLElement {
 
   _mode() {
     if (this._tab === "catalogue") return "catalogue";
+    if (this._tab === "history") return "history";
     return this._data.shop ? this._data.shop.state : "none";
   }
 
@@ -307,11 +310,12 @@ class HouseholdShoppingCard extends HTMLElement {
     $("top").innerHTML = `<div class="title">${esc(d.name)}</div><span class="chip ${state}">${chip}${store}</span>`;
     $("tabs").innerHTML = `
       <button class="tab ${this._tab === "shop" ? "on" : ""}" data-action="tab" data-tab="shop">🛒 ${d.shop ? "Shop" : "Shops"}</button>
-      <button class="tab ${this._tab === "catalogue" ? "on" : ""}" data-action="tab" data-tab="catalogue">📋 Catalogue</button>`;
+      <button class="tab ${this._tab === "catalogue" ? "on" : ""}" data-action="tab" data-tab="catalogue">📋 Catalogue</button>
+      <button class="tab ${this._tab === "history" ? "on" : ""}" data-action="tab" data-tab="history">🕘 History</button>`;
     this._renderBar(mode);
     this._renderProgress(mode);
     $("body").innerHTML =
-      { none: () => this._renderNone(), planning: () => this._renderPlanning(), shopping: () => this._renderShopping(), catalogue: () => this._renderCatalogue() }[mode]();
+      { none: () => this._renderNone(), planning: () => this._renderPlanning(), shopping: () => this._renderShopping(), catalogue: () => this._renderCatalogue(), history: () => this._renderHistory() }[mode]();
     $("foot").innerHTML = this._renderFoot(mode);
   }
 
@@ -359,14 +363,16 @@ class HouseholdShoppingCard extends HTMLElement {
     return html;
   }
 
-  _summaryPanel(s, title) {
+  _summaryPanel(s, title, { gotList = false } = {}) {
     const pills = (list, cls = "") =>
       list.length ? `<div class="pills">${list.map((i) => `<span class="pill ${cls}">${esc(i.name)}${(i.qty || 1) > 1 ? ` ×${i.qty}` : ""}</span>`).join("")}</div>` : "<div class='meta'>None</div>";
     return `<div class="panel">
-      <h3>${esc(title)} · ${esc(fmtDate(s.finished))}${s.store ? ` · ${esc(s.store)}` : ""}</h3>
+      ${title ? `<h3>${esc(title)} · ${esc(fmtDate(s.finished))}${s.store ? ` · ${esc(s.store)}` : ""}</h3>` : ""}
       <div style="font-weight:600;margin:8px 0 6px">❌ Missing (${s.missing.length})</div>${pills(s.missing, "miss")}
       ${s.not_got.length ? `<div style="font-weight:600;margin:12px 0 6px">⏭ Not got (${s.not_got.length})</div>${pills(s.not_got)}` : ""}
-      <div class="meta">✓ Got ${s.got.length} item${s.got.length === 1 ? "" : "s"}</div>
+      ${gotList
+        ? `<div style="font-weight:600;margin:12px 0 6px">✓ Got (${s.got.length})</div>${pills(s.got)}`
+        : `<div class="meta">✓ Got ${s.got.length} item${s.got.length === 1 ? "" : "s"}</div>`}
     </div>`;
   }
 
@@ -466,13 +472,57 @@ class HouseholdShoppingCard extends HTMLElement {
     return html;
   }
 
+  async _loadHistory(limit = 20) {
+    try {
+      this._history = await this._hass.connection.sendMessagePromise({
+        type: `${DOMAIN}/history`,
+        entity_id: this._entity,
+        limit,
+      });
+    } catch (err) {
+      this._history = { total: 0, shops: [], error: err?.message || String(err) };
+    }
+    if (this._tab === "history") this._render();
+  }
+
+  _renderHistory() {
+    const h = this._history;
+    if (!h) return `<div class="empty">Loading…</div>`;
+    if (h.error) return `<div class="empty">${esc(h.error)}</div>`;
+    if (!h.shops.length) return `<div class="empty">No finished shops yet. Your shops appear here once you tap Finish.</div>`;
+    const n = (list) => list.length;
+    const rows = h.shops
+      .map(
+        (s) => `<div class="row click" data-action="history-open" data-id="${esc(s.id)}">
+          <span class="pic">🧾</span>
+          <div class="txt"><div class="name">${esc(fmtDate(s.finished))}${s.store ? ` · ${esc(s.store)}` : ""}</div>
+            <div class="note">✓ ${n(s.got)} got · ✗ ${n(s.missing)} missing${s.not_got.length ? ` · ⏭ ${n(s.not_got)} not got` : ""}</div></div>
+          <span>›</span>
+        </div>`
+      )
+      .join("");
+    const more = h.shops.length < h.total ? `<button class="btn big" data-action="history-more">Show older shops</button>` : "";
+    return `<div class="group"><div class="ghead">🕘 Finished shops<span class="count">${h.total}</span></div>${rows}</div>${more}`;
+  }
+
+  _historySheet(s) {
+    if (!s) return;
+    const open = !!this._data.shop;
+    this._openSheet(`<h2>🧾 ${esc(fmtDate(s.finished))}${s.store ? ` · ${esc(s.store)}` : ""}</h2>
+      ${this._summaryPanel(s, null, { gotList: true })}
+      <div class="row2"><button class="btn" data-action="close">Close</button>
+      <button class="btn primary" data-action="repeat" data-id="${esc(s.id)}" ${open ? "disabled" : ""}>Shop again</button></div>
+      ${open ? `<div class="meta">Finish or discard the open shop to use "Shop again".</div>` : ""}`);
+  }
+
   _renderFoot(mode) {
     if (mode === "planning")
       return `<button class="btn" data-action="cancel-shop">Cancel</button>
               <button class="btn" data-action="store">🏪 Store</button>
               <button class="btn primary" style="flex:1" data-action="start">Start shopping →</button>`;
     if (mode === "shopping")
-      return `<button class="btn" data-action="back-plan" title="Add from stock">📋 Stock</button>
+      return `<button class="btn" data-action="cancel-shop" title="Discard this shop" aria-label="Discard this shop">✕</button>
+              <button class="btn" data-action="back-plan" title="Add from stock">📋 Stock</button>
               <button class="btn primary" style="flex:1" data-action="finish">Finish shop</button>`;
     return "";
   }
@@ -485,7 +535,12 @@ class HouseholdShoppingCard extends HTMLElement {
       return;
     }
     const el = e.target.closest("[data-action]");
-    if (!el) return;
+    if (!el) {
+      // Tapping an item (not its ✓/✗ buttons) opens its menu (BR-ITEM-10).
+      const row = e.target.closest("[data-press]");
+      if (row) this._itemMenu(this._shopItem(row.dataset.press));
+      return;
+    }
     this._action(el.dataset.action, el);
   }
 
@@ -507,7 +562,17 @@ class HouseholdShoppingCard extends HTMLElement {
     switch (action) {
       case "tab":
         this._tab = el.dataset.tab;
+        if (this._tab === "history") this._loadHistory();
         return this._render();
+      case "history-open":
+        return this._historySheet(this._history?.shops.find((h) => h.id === id));
+      case "history-more":
+        return this._loadHistory(this._history.shops.length + 20);
+      case "repeat": {
+        this._closeSheet();
+        if (await this._call("repeat_shop", { shop_id: id })) this._tab = "shop";
+        return this._render();
+      }
       case "collapse":
         return this._toggleCollapsed(el.dataset.key);
       case "new-shop":
@@ -543,8 +608,15 @@ class HouseholdShoppingCard extends HTMLElement {
       }
       case "start":
         return this._call("start_shopping");
-      case "cancel-shop":
-        return this._confirm("Cancel this shop?", "The list will be deleted.", "Cancel shop", () => this._call("cancel_shop"));
+      case "cancel-shop": {
+        // BR-SHOP-09: discarding is allowed mid-shop, but say what's lost.
+        const items = this._data.shop?.items || [];
+        const done = items.filter((i) => i.state !== "needed").length;
+        const sub = done
+          ? `The list of ${items.length} is deleted, including ${done} already marked got or missing. Nothing is saved to history.`
+          : `The list of ${items.length} item${items.length === 1 ? "" : "s"} is deleted. Nothing is saved to history.`;
+        return this._confirm("Discard this shop?", sub, "Discard shop", () => this._call("cancel_shop"));
+      }
       case "store":
         return this._storeSheet();
       case "back-plan":

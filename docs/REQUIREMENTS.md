@@ -1,6 +1,6 @@
 # Household Shopping: Requirements & Business Rules
 
-**Status:** v1.2, agreed (v1.1 adds images and receipt import; v1.2 adds quantities). Changes from here on are made by editing this file, with a note in the commit.
+**Status:** v1.3, agreed (v1.1 images and receipt import; v1.2 quantities; v1.3 discard mid-shop, tap-to-menu, history tab). Changes from here on are made by editing this file, with a note in the commit.
 
 `MUST`, `SHOULD` and `MAY` are used as in RFC 2119. Rule IDs are referred to in tests and commits.
 
@@ -114,7 +114,7 @@ The integration itself doesn't read receipts. Reading a receipt is done by an AI
 | BR-SHOP-06 | **Finishing** records: store, created, started, finished, **got**, **missing** and **not got** (items still `needed`). |
 | BR-SHOP-07 | The summary leads with **what was missing**. It shows on the card and fires `household_shopping_shop_finished`. Phone notifications are left to the user's own automations, and the README includes a sample. |
 | BR-SHOP-08 | **No carry-over.** A new shop starts empty. Missing items appear only in the last shop's summary, which stays visible from the card. *(Owner decision.)* |
-| BR-SHOP-09 | Cancelling a shop that's still in `planning` deletes it and leaves no history. |
+| BR-SHOP-09 | A shop can be **discarded at any time**, whether planning or shopping. It needs a confirmation that says how many items are already marked, and nothing is saved to history. *(Changed in v1.3 at the owner's request; previously planning only.)* |
 
 ## 5. Shop items
 
@@ -129,6 +129,7 @@ The integration itself doesn't read receipts. Reading a receipt is done by an AI
 | BR-ITEM-07 | Items can be set to `got` or `missing` during `planning` too, for example "already grabbed it". |
 | BR-ITEM-08 | While shopping, items are **grouped by aisle** in aisle order, in the order added within each aisle. Items that are done drop to the bottom of their aisle. |
 | BR-ITEM-09 | Every change reaches all devices within seconds and survives an HA restart. |
+| BR-ITEM-10 | Tapping an item while shopping (anywhere except its ✓/✗ buttons) opens its menu, the same one as long-press, which includes **Remove from this shop**. *(v1.3: long-press alone was too hard to discover.)* |
 
 ## 5a. Quantities
 
@@ -151,6 +152,8 @@ The integration itself doesn't read receipts. Reading a receipt is done by an AI
 | BR-HIST-01 | Keep the most recent 100 finished shops. |
 | BR-HIST-02 | `get_history(limit)` returns the newest first. |
 | BR-HIST-03 | Shop records keep each item's catalogue ID (when it has one) as well as its name, so BR-OCC-06 and future suggestions can work. |
+| BR-HIST-04 | The card has a **History** tab: finished shops, newest first, 20 at a time, each showing its date, store and counts. Tapping one shows what was missing, not got and got, with quantities. |
+| BR-HIST-05 | **Shop again:** a past shop can start a new shop with the same items and quantities, using current catalogue names. This is only possible when no shop is open. |
 
 ---
 
@@ -174,7 +177,7 @@ HA's to-do entities have only two states (`needs_action` and `completed`), and t
 | `sensor.<name>_shop` | `none` / `planning` / `shopping`, with attributes for store, counts and the last summary. |
 
 ### 7.4 Services
-Shops: `new_shop(store?, items?)` (items are names or `{name, qty, note, aisle}`), `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `add_item(name, aisle?, note?, qty?)`, `set_item_state(item, state)`, `get_history(limit)`.
+Shops: `new_shop(store?, items?)` (items are names or `{name, qty, note, aisle}`), `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `repeat_shop(shop_id)`, `add_item(name, aisle?, note?, qty?)`, `set_item_state(item, state)`, `get_history(limit)`.
 
 Catalogue: `add_stock_item(name, location?, aisle?, note?, icon?)`, `add_occasional_item(name, aisle?, note?)`, `update_catalogue_item(name, new_name?, location?, aisle?, note?)`, `promote_to_stock(name, location?)`, `demote_to_occasional(name)`, `remove_catalogue_item(name)`, `import_catalogue(items, kind)` for bulk loading, `set_item_image(name, image_url? | image_data?, source?, attribution?)`, `clear_item_image(name)`, and `get_catalogue()` (returns data, including whether each item has a photo).
 

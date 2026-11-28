@@ -75,7 +75,27 @@ def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection
     send()
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/history",
+        vol.Optional("entry_id"): str,
+        vol.Optional("entity_id"): str,
+        vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=100)),
+        vol.Optional("offset", default=0): vol.All(int, vol.Range(min=0)),
+    }
+)
+@callback
+def ws_history(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """BR-HIST-04: finished shops for the card's History tab, newest first."""
+    manager = _manager(hass, msg.get("entry_id"), msg.get("entity_id"))
+    if manager is None:
+        connection.send_error(msg["id"], "not_found", "No Household Shopping list found")
+        return
+    connection.send_result(msg["id"], manager.model.history_page(msg["limit"], msg["offset"]))
+
+
 @callback
 def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_lists)
     websocket_api.async_register_command(hass, ws_subscribe)
+    websocket_api.async_register_command(hass, ws_history)

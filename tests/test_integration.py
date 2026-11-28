@@ -197,3 +197,25 @@ async def test_card_registered_as_dashboard_resource(hass, entry):  # §7.1
     assert [r["url"] for r in ours] == [f"{CARD_URL}?v=9.9.9"]
     await async_remove_card_resource(hass)
     assert not [r for r in resources.async_items() if r["url"].startswith(CARD_URL)]
+
+
+async def test_history_websocket_and_repeat(hass, entry, hass_ws_client):  # BR-HIST-04/05
+    await call(hass, "new_shop", store="Aldi", items=[{"name": "Pasta", "qty": 3}])
+    await call(hass, "start_shopping")
+    await call(hass, "finish_shop")
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": f"{DOMAIN}/history", "entity_id": TODO, "limit": 5})
+    msg = await ws.receive_json()
+    assert msg["success"] and msg["result"]["total"] == 1
+    past = msg["result"]["shops"][0]
+    assert past["store"] == "Aldi" and past["not_got"][0]["qty"] == 3
+    result = snapshot(await call(hass, "repeat_shop", response=True, shop_id=past["id"]))
+    assert result["shop_id"]
+    shop = snapshot(await call(hass, "get_catalogue", response=True))["shop"]
+    assert [(i["name"], i["qty"]) for i in shop["items"]] == [("Pasta", 3)]
+    # Cancel mid-shop (BR-SHOP-09) leaves history unchanged.
+    await call(hass, "start_shopping")
+    await call(hass, "cancel_shop")
+    assert hass.states.get(SENSOR).state == "none"
+    await ws.send_json({"id": 2, "type": f"{DOMAIN}/history", "entity_id": TODO})
+    assert (await ws.receive_json())["result"]["total"] == 1

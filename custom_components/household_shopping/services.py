@@ -133,6 +133,11 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
     ),
     "finish_shop": ({}, _sync(lambda m, d: m.finish_shop()), SupportsResponse.OPTIONAL),
     "cancel_shop": ({}, _sync(lambda m, d: m.cancel_shop()), SupportsResponse.NONE),
+    "repeat_shop": (
+        {vol.Required("shop_id"): cv.string},
+        _sync(lambda m, d: {"shop_id": m.repeat_shop(d["shop_id"])["id"]}),
+        SupportsResponse.OPTIONAL,
+    ),
     "add_item": (
         {
             vol.Required("name"): cv.string,

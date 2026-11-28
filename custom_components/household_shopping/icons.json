@@ -90,6 +90,9 @@
     },
     "set_store": {
       "service": "mdi:store"
+    },
+    "repeat_shop": {
+      "service": "mdi:history"
     }
   }
 }

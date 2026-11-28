@@ -99,6 +99,6 @@ async def test_card_end_to_end(socket_enabled, hass, entry, aiohttp_client, hass
     assert last["store"] == "Woolworths Woden"
     assert sorted(i["name"] for i in last["missing"]) == ["Broccoli", "Tasty cheese"]
     assert sorted(i["name"] for i in last["got"]) == ["Bananas", "Full cream milk"]
-    assert len(last["not_got"]) == 3
+    assert len(last["not_got"]) == 2  # Birthday candles was removed mid-shop
     qty = {i["name"]: i["qty"] for i in last["got"] + last["missing"]}
     assert qty["Full cream milk"] == 3 and qty["Broccoli"] == 2  # BR-QTY-04

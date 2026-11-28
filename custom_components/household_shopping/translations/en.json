@@ -54,8 +54,18 @@
     },
     "cancel_shop": {
       "name": "Cancel shop",
-      "description": "Delete a shop that's still being planned.",
+      "description": "Discard the open shop, whether planning or shopping. Nothing is saved to history.",
       "fields": {}
+    },
+    "repeat_shop": {
+      "name": "Shop again",
+      "description": "Open a new shop with a past shop's items and quantities.",
+      "fields": {
+        "shop_id": {
+          "name": "Shop ID",
+          "description": "The id of a finished shop, from get_history."
+        }
+      }
     },
     "add_item": {
       "name": "Add item",

@@ -101,6 +101,12 @@ const [base, token, out, cardJs] = process.argv.slice(2);
   await click("[data-action=sheet-state][data-state=missing]");
   await expect(/missing/, "broccoli missing");
 
+  // Tapping an item opens its menu (BR-ITEM-10); remove one mid-shop.
+  await row("Birthday candles").locator(".txt").click();
+  await expect(/Remove from this shop/, "tap opens menu");
+  await click("#dlg [data-action=sheet-remove]");
+  if (await row("Birthday candles").count()) throw new Error("item not removed");
+
   await click("[data-action=finish]");
   await expect(/Finish this shop\?/, "confirm");
   await click("[data-action=confirm]");
@@ -111,6 +117,23 @@ const [base, token, out, cardJs] = process.argv.slice(2);
   await click("[data-action=tab][data-tab=catalogue]");
   await expect(/Paste list/, "catalogue");
   await shot("7-catalogue");
+  // History tab (BR-HIST-04), shop again (BR-HIST-05), discard mid-shop (BR-SHOP-09).
+  await click("[data-action=tab][data-tab=history]");
+  await expect(/Finished shops/, "history tab");
+  await shot("10-history");
+  await card.locator("[data-action=history-open]").first().click();
+  await expect(/Woolworths Woden/, "history detail");
+  await shot("11-history-detail");
+  await click("#dlg [data-action=repeat]");
+  await expect(/Start shopping/, "repeated shop in planning");
+  await click("[data-action=start]");
+  await expect(/Finish shop/, "shopping again");
+  await click("[data-action=cancel-shop]");
+  await expect(/Discard this shop\?/, "discard confirm");
+  await click("[data-action=confirm]");
+  await expect(/No shop open/, "discarded");
+  await click("[data-action=tab][data-tab=catalogue]");
+
   // Item names and notes are user/AI supplied: they must render as text, never HTML.
   const injected = await card.evaluate((el) => !!el.shadowRoot.querySelector('#body b, img[src="x"]'));
   if (injected) throw new Error("HTML injection: item name/note rendered as markup");

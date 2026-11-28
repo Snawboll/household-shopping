@@ -437,11 +437,36 @@ class ShoppingModel:
         return shop
 
     def cancel_shop(self) -> None:
-        """BR-SHOP-09: only a planning shop can be cancelled; no history kept."""
-        shop = self._require_shop()
-        if shop["state"] != PLANNING:
-            raise ShoppingError("Shopping has started. Finish the shop instead")
+        """BR-SHOP-09: discard the open shop, planning or shopping; no history kept."""
+        self._require_shop()
         self.data["shop"] = None
+
+    # -------------------------------------------------------------- history
+
+    def history_page(self, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+        """BR-HIST-02/04: finished shops, newest first, a page at a time."""
+        newest_first = list(reversed(self.data["history"]))
+        return {
+            "total": len(newest_first),
+            "shops": newest_first[offset : offset + limit],
+        }
+
+    def repeat_shop(self, shop_id: str) -> dict[str, Any]:
+        """BR-HIST-05: open a new shop with a past shop's items and quantities."""
+        record = next((h for h in self.data["history"] if h["id"] == shop_id), None)
+        if record is None:
+            raise ShoppingError("That shop isn't in the history")
+        if self.shop is not None:
+            raise ShoppingError("A shop is already open. Finish or cancel it first")
+        shop = self.new_shop(record.get("store"))
+        for entry in record["got"] + record["missing"] + record["not_got"]:
+            # Prefer the catalogue item (it may have been renamed since).
+            catalogue = self.find_catalogue(entry.get("catalogue_id"))
+            self.add_item(
+                catalogue["name"] if catalogue else entry["name"],
+                qty=entry.get("qty", 1),
+            )
+        return shop
 
     def finish_shop(self) -> dict[str, Any]:
         """BR-SHOP-04/06/07: close the shop and record the summary."""

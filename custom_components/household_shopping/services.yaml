@@ -32,6 +32,13 @@ finish_shop:
   target: *id001
 cancel_shop:
   target: *id001
+repeat_shop:
+  target: *id001
+  fields:
+    shop_id:
+      required: true
+      selector:
+        text: {}
 add_item:
   target: *id001
   fields:

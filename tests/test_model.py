@@ -184,12 +184,15 @@ def test_lifecycle_and_summary(model, events):  # BR-SHOP-03/04/06/07, BR-HIST-0
     assert [e for e, _ in events] == [m.EVENT_ITEM_MISSING, m.EVENT_SHOP_FINISHED]
 
 
-def test_cancel_only_while_planning(model):  # BR-SHOP-09
+def test_cancel_planning_or_shopping_keeps_no_history(model):  # BR-SHOP-09
     model.new_shop()
     model.cancel_shop()
     assert model.shop is None and model.data["history"] == []
-    model.new_shop()
+    model.add_item("Milk")
     model.start_shopping()
+    model.set_item_state("Milk", m.GOT)
+    model.cancel_shop()  # allowed mid-shop since v1.3
+    assert model.shop is None and model.data["history"] == []
     with pytest.raises(m.ShoppingError):
         model.cancel_shop()
 
@@ -342,3 +345,39 @@ def test_normalise_old_data():  # NFR-02
     data = m.normalise(old)
     assert data["catalogue"][0]["qty"] == 1 and data["shop"]["items"][0]["qty"] == 1
     assert data["history"][0]["missing"][0]["qty"] == 1
+
+
+# ------------------------------------------------------------------ history
+
+def _finish(model, items, store=None):
+    model.new_shop(store)
+    model.add_items(items)
+    model.start_shopping()
+    return model.finish_shop()
+
+
+def test_history_page_newest_first(model):  # BR-HIST-02/04
+    ids = [_finish(model, ["Milk"], store=f"S{i}")["id"] for i in range(5)]
+    page = model.history_page(limit=2)
+    assert page["total"] == 5 and [s["id"] for s in page["shops"]] == ids[::-1][:2]
+    assert [s["id"] for s in model.history_page(limit=2, offset=4)["shops"]] == ids[:1]
+
+
+def test_repeat_shop(model):  # BR-HIST-05
+    stock(model, "Milk")
+    model.new_shop("Coles")
+    model.add_items([{"name": "Milk", "qty": 2}, "Eggs", "Bread"])
+    model.start_shopping()
+    model.set_item_state("Milk", m.GOT)
+    model.set_item_state("Eggs", m.MISSING)
+    record = model.finish_shop()
+    model.update_catalogue_item("Milk", name="Full cream milk")  # renamed since
+    with pytest.raises(m.ShoppingError):
+        model.repeat_shop("nope")
+    shop = model.repeat_shop(record["id"])
+    assert shop["store"] == "Coles" and shop["state"] == m.PLANNING
+    assert [(i["name"], i["qty"], i["state"]) for i in shop["items"]] == [
+        ("Full cream milk", 2, m.NEEDED), ("Eggs", 1, m.NEEDED), ("Bread", 1, m.NEEDED)
+    ]
+    with pytest.raises(m.ShoppingError, match="already open"):
+        model.repeat_shop(record["id"])
