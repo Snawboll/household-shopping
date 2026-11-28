@@ -76,6 +76,8 @@ async def test_card_end_to_end(socket_enabled, hass, entry, aiohttp_client, hass
     ):
         await hass.services.async_call(DOMAIN, svc, {"entity_id": "todo.shopping", **data}, blocking=True)
 
+    hass.states.async_set("person.kelsie", "home", {"friendly_name": "Kelsie", "device_trackers": []})
+    hass.states.async_set("person.elijah", "home", {"friendly_name": "Elijah", "device_trackers": []})
     client = await aiohttp_client(hass.http.app)
     base = str(client.make_url("")).rstrip("/")
     out = Path(os.environ.get("HS_SCREENSHOTS", tmp_path))
@@ -95,7 +97,17 @@ async def test_card_end_to_end(socket_enabled, hass, entry, aiohttp_client, hass
     history = await hass.services.async_call(
         DOMAIN, "get_history", {"entity_id": "todo.shopping"}, blocking=True, return_response=True
     )
-    last = history["todo.shopping"]["shops"][0]
+    shops = history["todo.shopping"]["shops"]
+    quick = shops[0]  # newest: the quick shop
+    assert quick["kind"] == "quick" and quick["assignee"] == "person.kelsie" and quick["store"] == "Aldi"
+    assert [i["name"] for i in quick["got"]] == ["Birthday card"] and [i["name"] for i in quick["missing"]] == ["Milk"]
+    catalogue = await hass.services.async_call(
+        DOMAIN, "get_catalogue", {"entity_id": "todo.shopping"}, blocking=True, return_response=True
+    )
+    names = {c["name"] for c in catalogue["todo.shopping"]["catalogue"]}
+    assert "Birthday card" not in names  # BR-QUICK-03
+    assert catalogue["todo.shopping"]["shop"]["state"] == "planning"  # main shop untouched
+    last = next(s for s in shops if s["store"] == "Woolworths Woden")
     assert last["store"] == "Woolworths Woden"
     assert sorted(i["name"] for i in last["missing"]) == ["Broccoli", "Tasty cheese"]
     assert sorted(i["name"] for i in last["got"]) == ["Bananas", "Full cream milk"]

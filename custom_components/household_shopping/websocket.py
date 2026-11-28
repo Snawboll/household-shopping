@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
+from .people import people
 
 
 def todo_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
@@ -66,6 +67,7 @@ def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection
                     "entity_id": todo_entity_id(hass, manager.entry_id),
                     "name": manager.name,
                     **manager.model.snapshot(),
+                    "people": people(hass),
                 },
             )
         )

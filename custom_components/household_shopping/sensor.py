@@ -53,4 +53,14 @@ class ShopSensor(ShoppingEntity, SensorEntity):
             "missing_items": names(MISSING),
             "last_shop_finished": last and last["finished"],
             "last_shop_missing": last and [i["name"] for i in last["missing"]],
+            # BR-QUICK-05: open quick shops, e.g. for "remind me when I'm near Aldi".
+            "quick_shops": [
+                {
+                    "shop_id": q["id"],
+                    "store": q["store"],
+                    "assignee": q.get("assignee"),
+                    "needed": sum(1 for i in q["items"] if i["state"] == NEEDED),
+                }
+                for q in self.model.quick_shops
+            ],
         }

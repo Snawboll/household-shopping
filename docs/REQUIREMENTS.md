@@ -1,6 +1,6 @@
 # Household Shopping: Requirements & Business Rules
 
-**Status:** v1.3, agreed (v1.1 images and receipt import; v1.2 quantities; v1.3 discard mid-shop, tap-to-menu, history tab). Changes from here on are made by editing this file, with a note in the commit.
+**Status:** v1.4, agreed (v1.1 images and receipt import; v1.2 quantities; v1.3 discard mid-shop, tap-to-menu, history tab; v1.4 quick shops and assignment). Changes from here on are made by editing this file, with a note in the commit.
 
 `MUST`, `SHOULD` and `MAY` are used as in RFC 2119. Rule IDs are referred to in tests and commits.
 
@@ -106,7 +106,7 @@ The integration itself doesn't read receipts. Reading a receipt is done by an AI
 
 | ID | Rule |
 |---|---|
-| BR-SHOP-01 | **Only one shop can be open (`planning` or `shopping`) at a time.** Finished shops are read-only history. |
+| BR-SHOP-01 | **Only one main shop (the stock-check one) can be open at a time.** Quick shops (§4a) can be open alongside it. Finished shops are read-only history. |
 | BR-SHOP-02 | A new shop is created by hand (from the card or a service), or automatically when an item is added while no shop is open, for example "add milk to shopping" through Assist. |
 | BR-SHOP-03 | `planning` → `shopping` happens by hand ("Start shopping"). This switches the card from the stock picker to the aisle-sorted ✓/✗ view. |
 | BR-SHOP-04 | `shopping` → `finished` happens by hand ("Finish"). Nothing starts or finishes a shop automatically, but automations MAY call the services. |
@@ -115,6 +115,22 @@ The integration itself doesn't read receipts. Reading a receipt is done by an AI
 | BR-SHOP-07 | The summary leads with **what was missing**. It shows on the card and fires `household_shopping_shop_finished`. Phone notifications are left to the user's own automations, and the README includes a sample. |
 | BR-SHOP-08 | **No carry-over.** A new shop starts empty. Missing items appear only in the last shop's summary, which stays visible from the card. *(Owner decision.)* |
 | BR-SHOP-09 | A shop can be **discarded at any time**, whether planning or shopping. It needs a confirmation that says how many items are already marked, and nothing is saved to history. *(Changed in v1.3 at the owner's request; previously planning only.)* |
+
+## 4a. Quick shops and assignment
+
+*(Owner request, v1.4: "a convenient way to make an ad-hoc shop that isn't an inventory one", "assign it to me or Kelsie with a push notification".)*
+
+| ID | Rule |
+|---|---|
+| BR-QUICK-01 | A **quick shop** can be opened at any time, alongside the main shop and any other quick shops (up to 5). It may have a store and a list of items when it's created. |
+| BR-QUICK-02 | A quick shop skips planning and opens straight into `shopping`. It has no stock check. |
+| BR-QUICK-03 | Items added to a quick shop still link to matching catalogue items (aisle, icon, photo), but **new names aren't remembered** in the catalogue unless that's explicitly asked for. |
+| BR-QUICK-04 | Every shop action can name the shop it applies to (`shop_id`). Leaving it out means the main shop, so the standard to-do list, Assist and existing automations keep working on the main shop only. In the card, chips above the add box show each open shop and which one you're viewing. |
+| BR-QUICK-05 | Finishing or discarding a quick shop works like the main shop. Its summary goes to History, marked as quick and with its assignee. The shop sensor lists open quick shops. |
+| BR-ASSIGN-01 | Any open shop (main or quick) can be **assigned** to one person (an HA `person`), or to nobody. |
+| BR-ASSIGN-02 | When a shop is assigned or reassigned, the assignee gets a **push notification** on their phone(s) listing what's needed, which opens the shopping dashboard when tapped. Nobody is notified about a shop they assigned to themselves. Fires `household_shopping_shop_assigned`. |
+| BR-ASSIGN-03 | A **remind** action re-sends the current list to the assignee. |
+| BR-ASSIGN-04 | A person's phones are worked out from their linked device trackers that come from the Companion app. Watches are skipped, because they mirror the phone. No setup is needed. |
 
 ## 5. Shop items
 
@@ -177,14 +193,14 @@ HA's to-do entities have only two states (`needs_action` and `completed`), and t
 | `sensor.<name>_shop` | `none` / `planning` / `shopping`, with attributes for store, counts and the last summary. |
 
 ### 7.4 Services
-Shops: `new_shop(store?, items?)` (items are names or `{name, qty, note, aisle}`), `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `repeat_shop(shop_id)`, `add_item(name, aisle?, note?, qty?)`, `set_item_state(item, state)`, `get_history(limit)`.
+Shops: `new_shop(store?, items?)`, `new_quick_shop(store?, assignee?, items?)`, `assign_shop(shop_id, assignee)`, `remind_shop(shop_id)`; shop actions take an optional `shop_id` (items are names or `{name, qty, note, aisle}`), `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `repeat_shop(shop_id)`, `add_item(name, aisle?, note?, qty?)`, `set_item_state(item, state)`, `get_history(limit)`.
 
 Catalogue: `add_stock_item(name, location?, aisle?, note?, icon?)`, `add_occasional_item(name, aisle?, note?)`, `update_catalogue_item(name, new_name?, location?, aisle?, note?)`, `promote_to_stock(name, location?)`, `demote_to_occasional(name)`, `remove_catalogue_item(name)`, `import_catalogue(items, kind)` for bulk loading, `set_item_image(name, image_url? | image_data?, source?, attribution?)`, `clear_item_image(name)`, and `get_catalogue()` (returns data, including whether each item has a photo).
 
 With these services an AI assistant connected to HA (for example Claude through the HA MCP server) can build the stock list and create shops. Invalid calls, such as finishing with no shop open or naming an unknown item, raise a `ServiceValidationError` with a clear message.
 
 ### 7.5 Events
-`household_shopping_shop_finished`, `household_shopping_item_missing`.
+`household_shopping_shop_finished`, `household_shopping_item_missing`, `household_shopping_shop_assigned`.
 
 ---
 

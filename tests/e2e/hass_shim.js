@@ -37,9 +37,11 @@ window.makeHass = async (base, token) => {
         return () => subs.delete(id);
       },
     },
-    callService: (domain, service, service_data, target) => {
+    // Same signature as the frontend's hass.callService.
+    callService: (domain, service, service_data, target, _notify = true, returnResponse = false) => {
       window.__calls.push(service);
-      return send({ type: "call_service", domain, service, service_data, target });
+      return send({ type: "call_service", domain, service, service_data, target, ...(returnResponse ? { return_response: true } : {}) });
     },
+    user: { id: window.__userId || null },
   };
 };

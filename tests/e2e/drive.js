@@ -151,6 +151,32 @@ const [base, token, out, cardJs] = process.argv.slice(2);
   await shot("9-aisles");
 
   await card.locator("[data-action=close]").click();
+  // Quick shop alongside a main shop, assigned to Kelsie (BR-QUICK, BR-ASSIGN).
+  await click("[data-action=tab][data-tab=shop]");
+  await expect(/No shop open/, "no shop before quick");
+  await click("[data-action=quick-new]");
+  await expect(/Who's doing it\?/, "quick sheet");
+  await card.locator("#q-items").fill("Milk\nBirthday card");
+  await card.locator("#q-store").fill("Aldi");
+  await shot("12-quick-sheet");
+  await click('#dlg [data-action=quick-create][data-person="person.kelsie"]');
+  await expect(/Kelsie is doing this shop/, "assigned quick shop");
+  await click("[data-action=new-shop]");
+  await expect(/Main shop/, "main shop chip");
+  await expect(/On this shop/, "main shop planning");
+  await click('[data-action=select-shop]:has-text("Kelsie")');
+  await expect(/Kelsie is doing this shop/, "back on quick shop");
+  await shot("13-two-shops");
+  await row("Birthday card").locator("[data-state=got]").click();
+  await row("Milk").locator("[data-state=missing]").click();
+  await page.waitForTimeout(300);
+  await click("[data-action=finish]");
+  await click("[data-action=confirm]");
+  await expect(/Shop finished/, "quick summary");
+  await click("[data-action=close]");
+  await expect(/On this shop/, "main shop still open after quick finishes");
+  if (await card.locator('[data-action=select-shop]:has-text("Kelsie")').count()) throw new Error("quick shop chip still shown");
+
   console.log(JSON.stringify({ ok: true, errors, calls: await page.evaluate(() => window.__calls) }));
   await browser.close();
 })().catch((e) => {

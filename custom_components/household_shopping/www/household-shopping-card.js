@@ -11,8 +11,13 @@
  */
 
 const DOMAIN = "household_shopping";
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const LONG_PRESS_MS = 450;
+// Actions that work on one open shop: the card sends the one being viewed (BR-QUICK-04).
+const SHOP_SCOPED = new Set([
+  "start_shopping", "set_store", "finish_shop", "cancel_shop", "add_item", "update_item",
+  "set_item_state", "remove_item", "assign_shop", "remind_shop",
+]);
 
 const esc = (v) =>
   String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -44,6 +49,12 @@ const STYLE = `
   .bar select { width: auto; max-width: 40%; }
   .btn { min-height: 44px; padding: 0 16px; border-radius: 10px; background: var(--secondary-background-color); font-weight: 500; }
   .btn.primary { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+  .chooser { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 8px; }
+  .chooser:empty { display: none; }
+  .chooser .tab { flex: none; min-height: 40px; padding: 8px 12px; }
+  .chooser .tab.add { background: none; border: 2px dashed var(--divider-color); }
+  .cnt { display: inline-block; min-width: 1.6em; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: rgba(0,0,0,.12); font-size: .8em; }
+  .who { font-size: .85em; color: var(--secondary-text-color); }
   .btn:disabled { opacity: .45; cursor: default; }
   .btn.danger { color: var(--error-color, #db4437); }
   .btn { white-space: nowrap; }
@@ -166,6 +177,7 @@ class HouseholdShoppingCard extends HTMLElement {
       <ha-card>
         <div class="top" id="top"></div>
         <div class="tabs" id="tabs"></div>
+        <div class="chooser" id="chooser"></div>
         <div class="progress" id="progress" hidden></div>
         <div class="bar" id="bar"></div>
         <div class="body" id="body"><div class="empty">Loading…</div></div>
@@ -218,14 +230,40 @@ class HouseholdShoppingCard extends HTMLElement {
 
   _update(data) {
     const prev = this._data;
+    const viewing = prev ? this._cur : null;
     this._data = data;
-    // BR-SHOP-07: show the summary on the device that sees the shop close.
+    data.shops = data.shops || (data.shop ? [data.shop] : []);
+    data.people = data.people || [];
     if (data.last_shop?.id !== prev?.last_shop?.id && this._tab === "history") this._loadHistory();
-    if (prev?.shop && !data.shop && data.last_shop?.id === prev.shop.id) {
+    // The shop being viewed closed: fall back to another open shop.
+    if (this._shopId && !data.shops.some((x) => x.id === this._shopId)) this._shopId = null;
+    // BR-SHOP-07: show the summary on the device that sees the shop close.
+    if (viewing && !data.shops.some((x) => x.id === viewing.id) && data.last_shop?.id === viewing.id) {
       this._tab = "shop";
       this._showSummary(data.last_shop);
     }
     this._render();
+  }
+
+  /** The shop the Shop tab is showing: the chosen one, else main, else a quick one. */
+  get _cur() {
+    const d = this._data;
+    if (!d) return null;
+    return d.shops.find((x) => x.id === this._shopId) || d.shop || d.shops[0] || null;
+  }
+
+  _person(id) {
+    return this._data.people.find((p) => p.entity_id === id);
+  }
+
+  _me() {
+    return this._data.people.find((p) => p.user_id && p.user_id === this._hass.user?.id);
+  }
+
+  _shopLabel(shop) {
+    const who = shop.assignee ? this._person(shop.assignee)?.name || shop.assignee : null;
+    const base = shop.kind === "quick" ? who || "Quick shop" : "Main shop";
+    return shop.store ? `${base} · ${shop.store}` : base;
   }
 
   // ------------------------------------------------------------- helpers
@@ -235,12 +273,18 @@ class HouseholdShoppingCard extends HTMLElement {
   }
 
   async _call(service, data = {}) {
+    return (await this._callResp(service, data, false)) !== null;
+  }
+
+  /** Call an action on the shop being viewed; returns its response ({} if none) or null on error. */
+  async _callResp(service, data = {}, wantResponse = true) {
+    if (SHOP_SCOPED.has(service) && !("shop_id" in data) && this._cur) data = { ...data, shop_id: this._cur.id };
     try {
-      await this._hass.callService(DOMAIN, service, data, { entity_id: this._entity });
-      return true;
+      const result = await this._hass.callService(DOMAIN, service, data, { entity_id: this._entity }, true, wantResponse);
+      return (wantResponse && Object.values(result?.response || {})[0]) || {};
     } catch (err) {
       this._toast(err?.message || String(err));
-      return false;
+      return null;
     }
   }
 
@@ -282,7 +326,11 @@ class HouseholdShoppingCard extends HTMLElement {
   }
 
   _shopItem(id) {
-    return this._data.shop?.items.find((i) => i.id === id);
+    for (const shop of this._data.shops) {
+      const item = shop.items.find((i) => i.id === id);
+      if (item) return item;
+    }
+    return undefined;
   }
 
   _toggleCollapsed(key) {
@@ -296,7 +344,7 @@ class HouseholdShoppingCard extends HTMLElement {
   _mode() {
     if (this._tab === "catalogue") return "catalogue";
     if (this._tab === "history") return "history";
-    return this._data.shop ? this._data.shop.state : "none";
+    return this._cur ? this._cur.state : "none";
   }
 
   _render() {
@@ -304,14 +352,17 @@ class HouseholdShoppingCard extends HTMLElement {
     const $ = (id) => this.shadowRoot.getElementById(id);
     const d = this._data;
     const mode = this._mode();
-    const state = d.shop?.state || "none";
-    const chip = { none: "No shop", planning: "Planning", shopping: "Shopping" }[state];
-    const store = d.shop?.store ? ` · ${esc(d.shop.store)}` : "";
+    const cur = this._cur;
+    const state = cur?.state || "none";
+    const chip = cur?.kind === "quick" ? "⚡ Quick shop" : { none: "No shop", planning: "Planning", shopping: "Shopping" }[state];
+    const store = cur?.store ? ` · ${esc(cur.store)}` : "";
     $("top").innerHTML = `<div class="title">${esc(d.name)}</div><span class="chip ${state}">${chip}${store}</span>`;
     $("tabs").innerHTML = `
-      <button class="tab ${this._tab === "shop" ? "on" : ""}" data-action="tab" data-tab="shop">🛒 ${d.shop ? "Shop" : "Shops"}</button>
+      <button class="tab ${this._tab === "shop" ? "on" : ""}" data-action="tab" data-tab="shop">🛒 ${d.shops.length ? "Shop" : "Shops"}${d.shops.length > 1 ? `<span class="cnt">${d.shops.length}</span>` : ""}</button>
       <button class="tab ${this._tab === "catalogue" ? "on" : ""}" data-action="tab" data-tab="catalogue">📋 Catalogue</button>
       <button class="tab ${this._tab === "history" ? "on" : ""}" data-action="tab" data-tab="history">🕘 History</button>`;
+    // Which shop you're looking at comes before the add box (BR-QUICK-04).
+    $("chooser").innerHTML = this._tab === "shop" && d.shops.length ? this._chooser() : "";
     this._renderBar(mode);
     this._renderProgress(mode);
     $("body").innerHTML =
@@ -342,7 +393,7 @@ class HouseholdShoppingCard extends HTMLElement {
 
   _renderProgress(mode) {
     const el = this.shadowRoot.getElementById("progress");
-    const items = this._data.shop?.items || [];
+    const items = this._cur?.items || [];
     if (mode !== "shopping" || !items.length) {
       el.hidden = true;
       return;
@@ -352,12 +403,27 @@ class HouseholdShoppingCard extends HTMLElement {
     el.innerHTML = `<i style="width:${pct("got")}%;background:var(--success-color,#43a047)"></i><i style="width:${pct("missing")}%;background:var(--error-color,#db4437)"></i>`;
   }
 
+  /** Chips for each open shop, plus ways to open more (BR-QUICK-04). */
+  _chooser() {
+    const d = this._data;
+    const cur = this._cur;
+    const chips = d.shops.map((x) => {
+      const left = x.items.filter((i) => i.state === "needed").length;
+      return `<button class="tab ${cur && x.id === cur.id ? "on" : ""}" data-action="select-shop" data-id="${esc(x.id)}">${x.kind === "quick" ? "⚡" : "🛒"} ${esc(this._shopLabel(x))}<span class="cnt">${left}</span></button>`;
+    });
+    if (!d.shop) chips.push(`<button class="tab add" data-action="new-shop">＋ 🛒 Main shop</button>`);
+    chips.push(`<button class="tab add" data-action="quick-new">＋ ⚡ Quick shop</button>`);
+    return chips.join("");
+  }
+
   _renderNone() {
     const last = this._data.last_shop;
     let html = `<div class="panel" style="text-align:center">
         <div style="font-size:40px">🛒</div>
         <p>No shop open. Start one, then pick what's run out from your stock.</p>
         <button class="btn primary big" data-action="new-shop">New shop</button>
+        <p class="meta">Just need a few things? A quick shop skips the stock check and can be given to someone.</p>
+        <button class="btn big" data-action="quick-new">⚡ Quick shop</button>
       </div>`;
     if (last) html += this._summaryPanel(last, "Last shop");
     return html;
@@ -377,6 +443,10 @@ class HouseholdShoppingCard extends HTMLElement {
   }
 
   _renderPlanning() {
+    return this._renderPlanningBody();
+  }
+
+  _renderPlanningBody() {
     const d = this._data;
     const onList = new Set(d.shop.items.map((i) => i.catalogue_id));
     // BR-QTY-06: once ticked, the row shows a stepper for this shop's amount.
@@ -418,7 +488,15 @@ class HouseholdShoppingCard extends HTMLElement {
   }
 
   _renderShopping() {
-    const groups = this._data.shop.by_aisle;
+    const cur = this._cur;
+    const who = cur.assignee
+      ? `<div class="who" style="padding:0 16px 6px">👤 ${esc(this._person(cur.assignee)?.name || cur.assignee)} is doing this shop</div>`
+      : "";
+    return who + this._renderShoppingBody(cur);
+  }
+
+  _renderShoppingBody(cur) {
+    const groups = cur.by_aisle;
     if (!groups.length) return `<div class="empty">Nothing on the list yet. Add items above.</div>`;
     return groups
       .map(
@@ -494,8 +572,8 @@ class HouseholdShoppingCard extends HTMLElement {
     const rows = h.shops
       .map(
         (s) => `<div class="row click" data-action="history-open" data-id="${esc(s.id)}">
-          <span class="pic">🧾</span>
-          <div class="txt"><div class="name">${esc(fmtDate(s.finished))}${s.store ? ` · ${esc(s.store)}` : ""}</div>
+          <span class="pic">${s.kind === "quick" ? "⚡" : "🧾"}</span>
+          <div class="txt"><div class="name">${esc(fmtDate(s.finished))}${s.store ? ` · ${esc(s.store)}` : ""}${s.assignee ? ` · 👤 ${esc(this._person(s.assignee)?.name || s.assignee)}` : ""}</div>
             <div class="note">✓ ${n(s.got)} got · ✗ ${n(s.missing)} missing${s.not_got.length ? ` · ⏭ ${n(s.not_got)} not got` : ""}</div></div>
           <span>›</span>
         </div>`
@@ -522,7 +600,9 @@ class HouseholdShoppingCard extends HTMLElement {
               <button class="btn primary" style="flex:1" data-action="start">Start shopping →</button>`;
     if (mode === "shopping")
       return `<button class="btn" data-action="cancel-shop" title="Discard this shop" aria-label="Discard this shop">✕</button>
-              <button class="btn" data-action="back-plan" title="Add from stock">📋 Stock</button>
+              <button class="btn" data-action="back-plan" title="Add from the catalogue" aria-label="Add from the catalogue">📋</button>
+              <button class="btn" data-action="assign" title="Who's doing it" aria-label="Who's doing it">👤</button>
+              ${this._cur?.assignee ? `<button class="btn" data-action="remind" title="Remind them" aria-label="Remind them">🔔</button>` : ""}
               <button class="btn primary" style="flex:1" data-action="finish">Finish shop</button>`;
     return "";
   }
@@ -570,12 +650,16 @@ class HouseholdShoppingCard extends HTMLElement {
         return this._loadHistory(this._history.shops.length + 20);
       case "repeat": {
         this._closeSheet();
-        if (await this._call("repeat_shop", { shop_id: id })) this._tab = "shop";
+        if (await this._call("repeat_shop", { shop_id: id })) {
+          this._tab = "shop";
+          this._shopId = null;
+        }
         return this._render();
       }
       case "collapse":
         return this._toggleCollapsed(el.dataset.key);
       case "new-shop":
+        this._shopId = null; // show the main shop once it opens
         return this._call("new_shop");
       case "add": {
         const input = this.shadowRoot.getElementById("add");
@@ -585,8 +669,30 @@ class HouseholdShoppingCard extends HTMLElement {
         input.focus();
         return this._call("add_item", { name });
       }
+      case "select-shop":
+        this._shopId = id;
+        return this._render();
+      case "quick-new":
+        return this._quickSheet();
+      case "quick-create":
+        return this._createQuick(el.dataset.person || null);
+      case "assign":
+        return this._assignSheet();
+      case "assign-pick": {
+        this._closeSheet();
+        const person = el.dataset.person || null;
+        const r = await this._callResp("assign_shop", { assignee: person, open_path: location.pathname });
+        if (r) this._toast(person ? (r.notified ? `Sent to ${this._person(person)?.name}'s phone` : `Assigned to ${this._person(person)?.name}`) : "Unassigned");
+        return;
+      }
+      case "remind": {
+        const r = await this._callResp("remind_shop", { open_path: location.pathname });
+        if (r) this._toast(`Reminder sent to ${this._person(this._cur.assignee)?.name || "them"}`);
+        return;
+      }
       case "toggle":
         if (el.closest("#dlg")) el.remove(); // quick-add sheet: drop the row once added
+        if (this._cur?.kind === "quick") return this._call("add_item", { name: this._cat(id)?.name ?? id });
         return this._call("toggle_stock", { name: this._cat(id)?.name ?? id, on: el.dataset.on !== "1" });
       case "remove":
         return this._call("remove_item", { item: id });
@@ -610,7 +716,7 @@ class HouseholdShoppingCard extends HTMLElement {
         return this._call("start_shopping");
       case "cancel-shop": {
         // BR-SHOP-09: discarding is allowed mid-shop, but say what's lost.
-        const items = this._data.shop?.items || [];
+        const items = this._cur?.items || [];
         const done = items.filter((i) => i.state !== "needed").length;
         const sub = done
           ? `The list of ${items.length} is deleted, including ${done} already marked got or missing. Nothing is saved to history.`
@@ -622,8 +728,8 @@ class HouseholdShoppingCard extends HTMLElement {
       case "back-plan":
         return this._stockSheet();
       case "finish": {
-        const left = this._data.shop.items.filter((i) => i.state === "needed").length;
-        const missing = this._data.shop.items.filter((i) => i.state === "missing").length;
+        const left = this._cur.items.filter((i) => i.state === "needed").length;
+        const missing = this._cur.items.filter((i) => i.state === "missing").length;
         return this._confirm(
           "Finish this shop?",
           `${missing} missing${left ? ` · ${left} not got yet` : ""}. Got items are cleared and the summary is saved.`,
@@ -806,6 +912,55 @@ class HouseholdShoppingCard extends HTMLElement {
       <div class="row2"><button class="btn" data-action="close">Close</button></div>`);
   }
 
+  /** People list for picking who does a shop; "me" first. */
+  _peopleMenu(action, current) {
+    const me = this._me();
+    const list = [...this._data.people].sort((a, b) => (b === me) - (a === me));
+    const row = (p) => {
+      const isMe = p === me;
+      const hint = isMe ? " (me)" : p.can_notify ? " · 📱 gets a notification" : " · no phone to notify";
+      return `<button data-action="${action}" data-person="${esc(p.entity_id)}"><span style="width:28px;text-align:center">👤</span>${esc(p.name)}<span class="who">${hint}</span>${p.entity_id === current ? " ✓" : ""}</button>`;
+    };
+    return `<div class="menu">${list.map(row).join("")}
+      <button data-action="${action}" data-person=""><span style="width:28px;text-align:center">·</span>Nobody yet${!current ? " ✓" : ""}</button></div>`;
+  }
+
+  _quickSheet() {
+    this._openSheet(`<h2>⚡ Quick shop</h2>
+      <div class="sub">Opens straight into shopping, alongside any main shop. New items aren't added to your catalogue.</div>
+      <label>What's needed? (one per line)</label><textarea id="q-items" style="min-height:96px" placeholder="Milk&#10;Bread"></textarea>
+      <label>Store (optional)</label><input id="q-store" placeholder="e.g. Aldi">
+      <label>Who's doing it?</label>${this._peopleMenu("quick-create", this._me()?.entity_id)}
+      <div class="row2"><button class="btn" data-action="close">Cancel</button></div>`);
+    this.shadowRoot.getElementById("q-items").focus();
+  }
+
+  async _createQuick(person) {
+    const $ = (sel) => this.shadowRoot.querySelector(sel);
+    const items = $("#q-items").value.split(/\n|,/).map((x) => x.trim()).filter(Boolean);
+    const store = $("#q-store").value.trim();
+    this._closeSheet();
+    const r = await this._callResp("new_quick_shop", {
+      items,
+      ...(store ? { store } : {}),
+      ...(person ? { assignee: person } : {}),
+      open_path: location.pathname,
+    });
+    if (!r) return;
+    this._shopId = r.shop_id;
+    this._tab = "shop";
+    if (r.notified) this._toast(`Sent to ${this._person(person)?.name}'s phone`);
+    this._render();
+  }
+
+  _assignSheet() {
+    const cur = this._cur;
+    this._openSheet(`<h2>👤 Who's doing this shop?</h2>
+      <div class="sub">${esc(this._shopLabel(cur))} · they'll get a notification with the list.</div>
+      ${this._peopleMenu("assign-pick", cur.assignee)}
+      <div class="row2"><button class="btn" data-action="close">Cancel</button></div>`);
+  }
+
   _noteSheet(item) {
     this._openSheet(`<h2>${esc(item.name)}</h2><label>Note (brand, size…)</label>
       <input id="f-note" value="${esc(item.note)}" data-enter="save-note" data-id="${esc(item.id)}">
@@ -831,7 +986,7 @@ class HouseholdShoppingCard extends HTMLElement {
 
   _storeSheet() {
     this._openSheet(`<h2>Store</h2><div class="sub">Optional. It's shown in the summary.</div>
-      <input id="f-store" value="${esc(this._data.shop?.store || "")}" placeholder="e.g. Woolworths Woden" data-enter="save-store-real">
+      <input id="f-store" value="${esc(this._cur?.store || "")}" placeholder="e.g. Woolworths Woden" data-enter="save-store-real">
       <div class="row2"><button class="btn" data-action="close">Cancel</button>
       <button class="btn primary" data-action="save-store-real">Save</button></div>`);
     this.shadowRoot.getElementById("f-store").focus();
@@ -840,7 +995,7 @@ class HouseholdShoppingCard extends HTMLElement {
   _stockSheet() {
     // While shopping: quick access to the stock check without leaving shop mode.
     const d = this._data;
-    const onList = new Set(d.shop.items.map((i) => i.catalogue_id));
+    const onList = new Set(this._cur.items.map((i) => i.catalogue_id));
     const rows = d.catalogue
       .filter((c) => !onList.has(c.id))
       .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "stock" ? -1 : 1))

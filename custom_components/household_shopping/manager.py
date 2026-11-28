@@ -50,6 +50,10 @@ class ShoppingManager:
         await self._store.async_save(self.model.data)
 
     @callback
+    def fire(self, event: str, payload: dict[str, Any]) -> None:
+        self._fire(event, payload)
+
+    @callback
     def _fire(self, event: str, payload: dict[str, Any]) -> None:
         self.hass.bus.async_fire(
             f"{DOMAIN}_{event}", {"list": self.name, "entry_id": self.entry_id, **payload}

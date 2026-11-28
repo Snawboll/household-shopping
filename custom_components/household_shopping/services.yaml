@@ -5,7 +5,7 @@ new_shop:
       domain: todo
   fields:
     store:
-      selector: &id002
+      selector: &id005
         text: {}
       example: Woolworths Woden
     items:
@@ -15,12 +15,54 @@ new_shop:
       - Milk
       - name: Bananas
         qty: 5
+new_quick_shop:
+  target: *id001
+  fields:
+    store:
+      selector:
+        text: {}
+      example: Aldi
+    assignee:
+      selector: &id002
+        entity:
+          domain: person
+    items:
+      selector:
+        object: {}
+      example:
+      - Milk
+      - Bread
+    open_path:
+      selector: &id003
+        text: {}
+      example: /household-shopping/shop
+assign_shop:
+  target: *id001
+  fields:
+    shop_id:
+      selector: &id004
+        text: {}
+    assignee:
+      selector: *id002
+    open_path:
+      selector: *id003
+      example: /household-shopping/shop
+remind_shop:
+  target: *id001
+  fields:
+    shop_id:
+      selector: *id004
+    open_path:
+      selector: *id003
+      example: /household-shopping/shop
 start_shopping:
   target: *id001
   fields:
     store:
-      selector: *id002
+      selector: *id005
       example: Woolworths Woden
+    shop_id:
+      selector: *id004
 set_store:
   target: *id001
   fields:
@@ -28,10 +70,18 @@ set_store:
       selector:
         text: {}
       example: Woolworths Woden
+    shop_id:
+      selector: *id004
 finish_shop:
   target: *id001
+  fields:
+    shop_id:
+      selector: *id004
 cancel_shop:
   target: *id001
+  fields:
+    shop_id:
+      selector: *id004
 repeat_shop:
   target: *id001
   fields:
@@ -43,43 +93,50 @@ add_item:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Milk
     note:
-      selector: *id002
+      selector: *id005
       example: Dairy Farmers 3L
     aisle:
-      selector: *id002
+      selector: *id005
       example: Dairy & Eggs
     qty:
-      selector: &id003
+      selector: &id006
         number:
           min: 1
           max: 99
           mode: box
       example: 2
+    shop_id:
+      selector: *id004
+    remember:
+      selector:
+        boolean: {}
 update_item:
   target: *id001
   fields:
     item:
-      selector: *id002
+      selector: *id005
       required: true
       example: Milk
     name:
-      selector: *id002
+      selector: *id005
     note:
-      selector: *id002
+      selector: *id005
     aisle:
-      selector: *id002
+      selector: *id005
     qty:
-      selector: *id003
+      selector: *id006
       example: 2
+    shop_id:
+      selector: *id004
 set_item_state:
   target: *id001
   fields:
     item:
-      selector: *id002
+      selector: *id005
       required: true
       example: Eggs
     state:
@@ -90,18 +147,22 @@ set_item_state:
           - got
           - missing
       required: true
+    shop_id:
+      selector: *id004
 remove_item:
   target: *id001
   fields:
     item:
-      selector: *id002
+      selector: *id005
       required: true
       example: Milk
+    shop_id:
+      selector: *id004
 toggle_stock:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Milk
     'on':
@@ -121,83 +182,83 @@ add_stock_item:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Full cream milk
     location:
-      selector: *id002
+      selector: *id005
       example: Fridge
     aisle:
-      selector: *id002
+      selector: *id005
       example: Dairy & Eggs
     note:
-      selector: *id002
+      selector: *id005
       example: Dairy Farmers 3L
     icon:
-      selector: *id002
+      selector: *id005
       example: 🥛
     qty:
-      selector: *id003
+      selector: *id006
       example: 2
 add_occasional_item:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Sunscreen
     aisle:
-      selector: *id002
+      selector: *id005
       example: Health & Beauty
     note:
-      selector: *id002
+      selector: *id005
     icon:
-      selector: *id002
+      selector: *id005
     qty:
-      selector: *id003
+      selector: *id006
       example: 2
 update_catalogue_item:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Milk
     new_name:
-      selector: *id002
+      selector: *id005
     location:
-      selector: *id002
+      selector: *id005
     aisle:
-      selector: *id002
+      selector: *id005
     note:
-      selector: *id002
+      selector: *id005
     icon:
-      selector: *id002
+      selector: *id005
     qty:
-      selector: *id003
+      selector: *id006
       example: 2
 promote_to_stock:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Sunscreen
     location:
-      selector: *id002
+      selector: *id005
       example: Bathroom
 demote_to_occasional:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Sunscreen
 remove_catalogue_item:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Sunscreen
 import_catalogue:
@@ -226,11 +287,11 @@ set_item_image:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Milk
     image_url:
-      selector: *id002
+      selector: *id005
     image_data:
       selector:
         text:
@@ -244,7 +305,7 @@ set_item_image:
           - other
       default: other
     attribution:
-      selector: *id002
+      selector: *id005
     force:
       selector:
         boolean: {}
@@ -253,55 +314,55 @@ clear_item_image:
   target: *id001
   fields:
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Milk
 add_group:
   target: *id001
   fields:
     type:
-      selector: &id004
+      selector: &id007
         select:
           options:
           - location
           - aisle
       required: true
     name:
-      selector: *id002
+      selector: *id005
       required: true
       example: Garage
     icon:
-      selector: *id002
+      selector: *id005
       example: 🚗
 update_group:
   target: *id001
   fields:
     type:
-      selector: *id004
+      selector: *id007
       required: true
     group:
-      selector: *id002
+      selector: *id005
       required: true
       example: Garage
     name:
-      selector: *id002
+      selector: *id005
     icon:
-      selector: *id002
+      selector: *id005
 remove_group:
   target: *id001
   fields:
     type:
-      selector: *id004
+      selector: *id007
       required: true
     group:
-      selector: *id002
+      selector: *id005
       required: true
       example: Garage
 order_groups:
   target: *id001
   fields:
     type:
-      selector: *id004
+      selector: *id007
       required: true
     groups:
       selector:

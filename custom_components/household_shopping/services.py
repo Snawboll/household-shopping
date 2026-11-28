@@ -14,6 +14,7 @@ from homeassistant.helpers.service import async_register_platform_entity_service
 from .const import DOMAIN
 from .images import async_set_image_from_data, async_set_image_from_url, remove_image
 from .manager import ShoppingManager
+from .people import async_notify_assignee, check_person
 from .model import (
     AISLES,
     GROUP_TYPES,
@@ -59,6 +60,10 @@ CATALOGUE_ENTRY = vol.Schema(
 )
 GROUP_TYPE = vol.In([*GROUP_TYPES, "location", "aisle"])
 
+# Which open shop an action applies to; omitted means the main shop (BR-QUICK-04).
+SHOP_ID = {vol.Optional("shop_id"): cv.string}
+ASSIGNEE = vol.Any(None, "", cv.entity_id)
+
 
 def _group_type(value: str) -> str:
     return {"location": LOCATIONS, "aisle": AISLES}.get(value, value)
@@ -77,6 +82,52 @@ def _new_shop(model: ShoppingModel, d: dict[str, Any]) -> dict[str, Any]:
     shop = model.new_shop(d.get("store"))
     model.add_items(d.get("items", []))
     return {"shop_id": shop["id"], "items": [i["name"] for i in shop["items"]]}
+
+
+def _assignee(manager: ShoppingManager, d: dict[str, Any]) -> str | None:
+    person = d.get("assignee") or None
+    check_person(manager.hass, person)
+    return person
+
+
+async def _new_quick_shop(manager: ShoppingManager, d: dict[str, Any]) -> dict[str, Any]:
+    """BR-QUICK-01, BR-ASSIGN-02."""
+    person = _assignee(manager, d)
+
+    def apply(model: ShoppingModel) -> dict[str, Any]:
+        shop = model.new_quick_shop(d.get("store"), person)
+        model.add_items(d.get("items", []), shop_id=shop["id"])
+        return shop
+
+    shop = manager.run(apply)
+    notified = await async_notify_assignee(
+        manager.hass, shop, by_user_id=d.get("_user_id"), open_path=d.get("open_path")
+    )
+    return {"shop_id": shop["id"], "notified": notified}
+
+
+async def _assign_shop(manager: ShoppingManager, d: dict[str, Any]) -> dict[str, Any]:
+    """BR-ASSIGN-01/02: (re)assign a shop and tell the new person."""
+    person = _assignee(manager, d)
+    shop = manager.run(lambda m: m.assign_shop(d.get("shop_id"), person))
+    manager.fire("shop_assigned", {"shop_id": shop["id"], "assignee": person})
+    notified = await async_notify_assignee(
+        manager.hass, shop, by_user_id=d.get("_user_id"), open_path=d.get("open_path")
+    )
+    return {"notified": notified}
+
+
+async def _remind_shop(manager: ShoppingManager, d: dict[str, Any]) -> dict[str, Any]:
+    """BR-ASSIGN-03: nudge the assignee again with the current list."""
+    shop = manager.run(lambda m: m._require_shop(d.get("shop_id")))
+    if not shop.get("assignee"):
+        raise ShoppingError("Nobody is assigned to this shop yet")
+    notified = await async_notify_assignee(
+        manager.hass, shop, by_user_id=d.get("_user_id"), open_path=d.get("open_path"), reminder=True
+    )
+    if not notified:
+        raise ShoppingError("Couldn't find a phone to notify for that person")
+    return {"notified": True}
 
 
 def _import(model: ShoppingModel, d: dict[str, Any]) -> dict[str, Any]:
@@ -121,18 +172,38 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
         _sync(_new_shop),
         SupportsResponse.OPTIONAL,
     ),
+    "new_quick_shop": (
+        {
+            vol.Optional("store"): cv.string,
+            vol.Optional("assignee"): ASSIGNEE,
+            vol.Optional("items", default=list): [SHOP_ITEM],
+            vol.Optional("open_path"): cv.string,
+        },
+        _new_quick_shop,
+        SupportsResponse.OPTIONAL,
+    ),
+    "assign_shop": (
+        {**SHOP_ID, vol.Optional("assignee"): ASSIGNEE, vol.Optional("open_path"): cv.string},
+        _assign_shop,
+        SupportsResponse.OPTIONAL,
+    ),
+    "remind_shop": (
+        {**SHOP_ID, vol.Optional("open_path"): cv.string},
+        _remind_shop,
+        SupportsResponse.OPTIONAL,
+    ),
     "start_shopping": (
-        {vol.Optional("store"): cv.string},
-        _sync(lambda m, d: m.start_shopping(d.get("store")) and None),
+        {vol.Optional("store"): cv.string, **SHOP_ID},
+        _sync(lambda m, d: m.start_shopping(d.get("store"), d.get("shop_id")) and None),
         SupportsResponse.NONE,
     ),
     "set_store": (
-        {vol.Optional("store", default=""): vol.Any(None, cv.string)},
-        _sync(lambda m, d: m.set_store(d.get("store")) and None),
+        {vol.Optional("store", default=""): vol.Any(None, cv.string), **SHOP_ID},
+        _sync(lambda m, d: m.set_store(d.get("store"), d.get("shop_id")) and None),
         SupportsResponse.NONE,
     ),
-    "finish_shop": ({}, _sync(lambda m, d: m.finish_shop()), SupportsResponse.OPTIONAL),
-    "cancel_shop": ({}, _sync(lambda m, d: m.cancel_shop()), SupportsResponse.NONE),
+    "finish_shop": (SHOP_ID, _sync(lambda m, d: m.finish_shop(d.get("shop_id"))), SupportsResponse.OPTIONAL),
+    "cancel_shop": (SHOP_ID, _sync(lambda m, d: m.cancel_shop(d.get("shop_id"))), SupportsResponse.NONE),
     "repeat_shop": (
         {vol.Required("shop_id"): cv.string},
         _sync(lambda m, d: {"shop_id": m.repeat_shop(d["shop_id"])["id"]}),
@@ -144,9 +215,18 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
             vol.Optional("note"): cv.string,
             vol.Optional("aisle"): cv.string,
             vol.Optional("qty"): QTY,
+            vol.Optional("remember"): cv.boolean,
+            **SHOP_ID,
         },
         _sync(
-            lambda m, d: m.add_item(d["name"], note=d.get("note"), aisle=d.get("aisle"), qty=d.get("qty"))
+            lambda m, d: m.add_item(
+                d["name"],
+                note=d.get("note"),
+                aisle=d.get("aisle"),
+                qty=d.get("qty"),
+                remember=d.get("remember"),
+                shop_id=d.get("shop_id"),
+            )
             and None
         ),
         SupportsResponse.NONE,
@@ -158,23 +238,29 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
             vol.Optional("note"): cv.string,
             vol.Optional("aisle"): cv.string,
             vol.Optional("qty"): QTY,
+            **SHOP_ID,
         },
         _sync(
             lambda m, d: m.update_item(
-                d["item"], name=d.get("name"), note=d.get("note"), aisle=d.get("aisle"), qty=d.get("qty")
+                d["item"],
+                name=d.get("name"),
+                note=d.get("note"),
+                aisle=d.get("aisle"),
+                qty=d.get("qty"),
+                shop_id=d.get("shop_id"),
             )
             and None
         ),
         SupportsResponse.NONE,
     ),
     "set_item_state": (
-        {vol.Required("item"): cv.string, vol.Required("state"): vol.In(ITEM_STATES)},
-        _sync(lambda m, d: m.set_item_state(d["item"], d["state"]) and None),
+        {vol.Required("item"): cv.string, vol.Required("state"): vol.In(ITEM_STATES), **SHOP_ID},
+        _sync(lambda m, d: m.set_item_state(d["item"], d["state"], d.get("shop_id")) and None),
         SupportsResponse.NONE,
     ),
     "remove_item": (
-        {vol.Required("item"): cv.string},
-        _sync(lambda m, d: m.remove_item(d["item"])),
+        {vol.Required("item"): cv.string, **SHOP_ID},
+        _sync(lambda m, d: m.remove_item(d["item"], d.get("shop_id"))),
         SupportsResponse.NONE,
     ),
     "toggle_stock": (
@@ -319,6 +405,8 @@ def _make_func(handler: Callable[..., Any]) -> Callable[..., Awaitable[ServiceRe
     async def func(entity: Any, call: Any) -> ServiceResponse:
         data = getattr(call, "data", call)
         data = {k: v for k, v in data.items() if k not in _ENTITY_KEYS}
+        context = getattr(entity, "_context", None) or getattr(call, "context", None)
+        data["_user_id"] = getattr(context, "user_id", None)  # who asked (BR-ASSIGN-02)
         manager: ShoppingManager | None = getattr(entity, "shopping_manager", None)
         if manager is None:
             raise ShoppingError("Target a Household Shopping list, e.g. todo.shopping")

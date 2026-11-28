@@ -93,6 +93,15 @@
     },
     "repeat_shop": {
       "service": "mdi:history"
+    },
+    "new_quick_shop": {
+      "service": "mdi:cart-plus"
+    },
+    "assign_shop": {
+      "service": "mdi:account-arrow-right"
+    },
+    "remind_shop": {
+      "service": "mdi:bell-ring"
     }
   }
 }

@@ -27,6 +27,60 @@
         }
       }
     },
+    "new_quick_shop": {
+      "name": "New quick shop",
+      "description": "Open a quick shop alongside the main one, straight into shopping, optionally assigned to someone (who gets a push notification).",
+      "fields": {
+        "store": {
+          "name": "Store",
+          "description": "Store"
+        },
+        "assignee": {
+          "name": "Assign to",
+          "description": "The person doing the shop."
+        },
+        "items": {
+          "name": "Items",
+          "description": "Names, or objects with name, qty, note and aisle."
+        },
+        "open_path": {
+          "name": "Open path",
+          "description": "Dashboard path the notification opens, e.g. /household-shopping/shop."
+        }
+      }
+    },
+    "assign_shop": {
+      "name": "Assign shop",
+      "description": "Give a shop to someone (or nobody) and notify their phone.",
+      "fields": {
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
+        },
+        "assignee": {
+          "name": "Assign to",
+          "description": "Person, or empty for nobody."
+        },
+        "open_path": {
+          "name": "Open path",
+          "description": "Dashboard path the notification opens, e.g. /household-shopping/shop."
+        }
+      }
+    },
+    "remind_shop": {
+      "name": "Remind assignee",
+      "description": "Send the shop's current list to the person it's assigned to.",
+      "fields": {
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
+        },
+        "open_path": {
+          "name": "Open path",
+          "description": "Dashboard path the notification opens, e.g. /household-shopping/shop."
+        }
+      }
+    },
     "start_shopping": {
       "name": "Start shopping",
       "description": "Move the open shop from planning to shopping.",
@@ -34,6 +88,10 @@
         "store": {
           "name": "Store",
           "description": "Store"
+        },
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
         }
       }
     },
@@ -44,18 +102,32 @@
         "store": {
           "name": "Store",
           "description": "Store name; leave blank to clear."
+        },
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
         }
       }
     },
     "finish_shop": {
       "name": "Finish shop",
       "description": "Close the shop and record what was got and what was missing.",
-      "fields": {}
+      "fields": {
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
+        }
+      }
     },
     "cancel_shop": {
       "name": "Cancel shop",
       "description": "Discard the open shop, whether planning or shopping. Nothing is saved to history.",
-      "fields": {}
+      "fields": {
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
+        }
+      }
     },
     "repeat_shop": {
       "name": "Shop again",
@@ -86,6 +158,14 @@
         "qty": {
           "name": "Quantity",
           "description": "Quantity (1–99)."
+        },
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
+        },
+        "remember": {
+          "name": "Remember",
+          "description": "Save a new item to the catalogue. Defaults to yes for the main shop, no for quick shops."
         }
       }
     },
@@ -112,6 +192,10 @@
         "qty": {
           "name": "Quantity",
           "description": "Quantity (1–99)."
+        },
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
         }
       }
     },
@@ -126,6 +210,10 @@
         "state": {
           "name": "State",
           "description": "State"
+        },
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
         }
       }
     },
@@ -136,6 +224,10 @@
         "item": {
           "name": "Item",
           "description": "Item"
+        },
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
         }
       }
     },

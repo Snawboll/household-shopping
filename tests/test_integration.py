@@ -219,3 +219,96 @@ async def test_history_websocket_and_repeat(hass, entry, hass_ws_client):  # BR-
     assert hass.states.get(SENSOR).state == "none"
     await ws.send_json({"id": 2, "type": f"{DOMAIN}/history", "entity_id": TODO})
     assert (await ws.receive_json())["result"]["total"] == 1
+
+
+async def _phones(hass):
+    """Mirror the owner's setup: Elijah has a phone + watch, Kelsie a phone."""
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
+
+    app = MockConfigEntry(domain="mobile_app")
+    app.add_to_hass(hass)
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    trackers = {}
+    for key, name, model in (
+        ("fold", "Elijah Fold", "SM-F956B"),
+        ("watch", "Galaxy Watch7 (976L)", "Galaxy Watch7"),
+        ("kel", "SM-S711B", "SM-S711B"),
+    ):
+        device = dev_reg.async_get_or_create(
+            config_entry_id=app.entry_id, identifiers={("mobile_app", key)}, name=name, model=model
+        )
+        trackers[key] = ent_reg.async_get_or_create(
+            "device_tracker", "mobile_app", key, device_id=device.id, suggested_object_id=key
+        ).entity_id
+    eli = await hass.auth.async_create_user("Elijah", group_ids=["system-admin"])
+    kel = await hass.auth.async_create_user("Kelsie", group_ids=["system-admin"])
+    hass.states.async_set("person.elijah", "home", {"device_trackers": [trackers["watch"], trackers["fold"]], "user_id": eli.id, "friendly_name": "Elijah"})
+    hass.states.async_set("person.kelsie", "home", {"device_trackers": [trackers["kel"]], "user_id": kel.id, "friendly_name": "Kelsie"})
+    return {
+        "eli_user": eli.id,
+        "fold": async_mock_service(hass, "notify", "mobile_app_elijah_fold"),
+        "watch": async_mock_service(hass, "notify", "mobile_app_galaxy_watch7_976l"),
+        "kel": async_mock_service(hass, "notify", "mobile_app_sm_s711b"),
+    }
+
+
+async def test_quick_shop_assign_and_notify(hass, entry):  # BR-QUICK-*, BR-ASSIGN-*
+    from homeassistant.core import Context
+
+    from custom_components.household_shopping.people import notify_targets, people
+
+    calls = await _phones(hass)
+    assert notify_targets(hass, "person.elijah") == ["mobile_app_elijah_fold"]  # watch skipped
+    assert notify_targets(hass, "person.kelsie") == ["mobile_app_sm_s711b"]
+    assert [p["name"] for p in people(hass)] == ["Elijah", "Kelsie"]
+
+    eli = Context(user_id=calls["eli_user"])
+    result = await hass.services.async_call(
+        DOMAIN, "new_quick_shop",
+        {"entity_id": TODO, "assignee": "person.kelsie", "store": "Aldi",
+         "items": ["Milk", {"name": "Bananas", "qty": 6}], "open_path": "/household-shopping/shop"},
+        blocking=True, return_response=True, context=eli,
+    )
+    shop_id = result[TODO]["shop_id"]
+    assert result[TODO]["notified"] is True
+    await hass.async_block_till_done()
+    assert len(calls["kel"]) == 1 and not calls["fold"] and not calls["watch"]
+    note = calls["kel"][0].data
+    assert note["title"] == "🛒 Elijah asked you to do a quick shop at Aldi"
+    assert note["message"] == "Milk, Bananas ×6"
+    assert note["data"]["clickAction"] == "/household-shopping/shop"
+
+    # Main shop is untouched; the to-do list still shows only the main shop.
+    assert hass.states.get(SENSOR).attributes["quick_shops"][0]["needed"] == 2
+    assert hass.states.get(TODO).state == "0"
+
+    # Assigning to yourself sends nothing; reassigning notifies the new person.
+    r = await hass.services.async_call(DOMAIN, "assign_shop", {"entity_id": TODO, "shop_id": shop_id, "assignee": "person.elijah"}, blocking=True, return_response=True, context=eli)
+    assert r[TODO]["notified"] is False
+    r = await hass.services.async_call(DOMAIN, "assign_shop", {"entity_id": TODO, "shop_id": shop_id, "assignee": "person.kelsie"}, blocking=True, return_response=True, context=eli)
+    await hass.async_block_till_done()
+    assert r[TODO]["notified"] is True and len(calls["kel"]) == 2
+    await hass.services.async_call(DOMAIN, "remind_shop", {"entity_id": TODO, "shop_id": shop_id}, blocking=True, return_response=True, context=eli)
+    await hass.async_block_till_done()
+    assert calls["kel"][-1].data["title"].startswith("🛒 Reminder")
+
+    with pytest.raises(ServiceValidationError, match="isn't a person"):
+        await call(hass, "assign_shop", shop_id=shop_id, assignee="light.kitchen")
+
+    await call(hass, "set_item_state", item="Milk", state="got", shop_id=shop_id)
+    summary = snapshot(await call(hass, "finish_shop", response=True, shop_id=shop_id))
+    assert summary["kind"] == "quick" and summary["assignee"] == "person.kelsie"
+    assert hass.states.get(SENSOR).attributes["quick_shops"] == []
+
+
+async def test_snapshot_has_shops_and_people(hass, entry, hass_ws_client):  # BR-QUICK-04
+    await _phones(hass)
+    await call(hass, "new_shop")
+    await call(hass, "new_quick_shop", assignee="person.kelsie")
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": f"{DOMAIN}/subscribe"})
+    await ws.receive_json()
+    event = (await ws.receive_json())["event"]
+    assert [s["kind"] for s in event["shops"]] == ["main", "quick"]
+    assert {p["entity_id"]: p["can_notify"] for p in event["people"]} == {"person.elijah": True, "person.kelsie": True}

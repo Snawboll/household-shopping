@@ -37,6 +37,10 @@ GROUP_TYPES = (LOCATIONS, AISLES)
 OTHER_ID = "other"
 MAX_HISTORY = 100
 MAX_QTY = 99
+MAX_QUICK_SHOPS = 5
+
+MAIN = "main"
+QUICK = "quick"
 
 IMAGE_SOURCES = ("own", "openfoodfacts", "other")
 
@@ -96,6 +100,10 @@ def check_qty(qty: Any) -> int:
 
 def normalise(data: dict[str, Any]) -> dict[str, Any]:
     """Fill fields added in later versions so older stored data keeps working."""
+    data.setdefault("quick_shops", [])
+    if data.get("shop"):
+        data["shop"].setdefault("kind", MAIN)
+        data["shop"].setdefault("assignee", None)
     for entry in data.get("catalogue", []):
         entry.setdefault("qty", 1)
     for item in (data.get("shop") or {}).get("items", []):
@@ -126,6 +134,7 @@ def default_data() -> dict[str, Any]:
         AISLES: [{"id": i, "name": n, "icon": ic} for i, n, ic in DEFAULT_AISLES],
         "catalogue": [],
         "shop": None,
+        "quick_shops": [],
         "history": [],
     }
 
@@ -399,30 +408,80 @@ class ShoppingModel:
 
     @property
     def shop(self) -> dict[str, Any] | None:
+        """The main shop (the stock-check one), if open."""
         return self.data["shop"]
 
-    def _require_shop(self) -> dict[str, Any]:
+    @property
+    def quick_shops(self) -> list[dict[str, Any]]:
+        return self.data.setdefault("quick_shops", [])
+
+    @property
+    def open_shops(self) -> list[dict[str, Any]]:
+        return ([self.shop] if self.shop else []) + self.quick_shops
+
+    def _require_shop(self, shop_id: str | None = None) -> dict[str, Any]:
+        """Resolve a shop: the given id (main or quick), else the main shop."""
+        if shop_id:
+            for shop in self.open_shops:
+                if shop["id"] == shop_id:
+                    return shop
+            raise ShoppingError("That shop isn't open any more")
         if self.shop is None:
             raise ShoppingError("There's no shop open. Start a new shop first")
         return self.shop
 
+    def _close(self, shop: dict[str, Any]) -> None:
+        if shop is self.shop:
+            self.data["shop"] = None
+        else:
+            self.data["quick_shops"] = [q for q in self.quick_shops if q is not shop]
+
     def new_shop(self, store: str | None = None) -> dict[str, Any]:
-        """BR-SHOP-01: one open shop at a time. BR-SHOP-08: starts empty."""
+        """BR-SHOP-01: one main shop at a time. BR-SHOP-08: starts empty."""
         if self.shop is not None:
             raise ShoppingError("A shop is already open. Finish or cancel it first")
         self.data["shop"] = {
             "id": _new_id(),
+            "kind": MAIN,
             "store": clean(store) or None,
             "state": PLANNING,
             "created": self._ts(),
             "started": None,
+            "assignee": None,
             "items": [],
         }
         return self.shop
 
-    def start_shopping(self, store: str | None = None) -> dict[str, Any]:
+    def new_quick_shop(
+        self, store: str | None = None, assignee: str | None = None
+    ) -> dict[str, Any]:
+        """BR-QUICK-01/02: a quick shop opens alongside the main one, straight
+        into shopping (no stock check)."""
+        if len(self.quick_shops) >= MAX_QUICK_SHOPS:
+            raise ShoppingError(f"There are already {MAX_QUICK_SHOPS} quick shops open. Finish one first")
+        now = self._ts()
+        shop = {
+            "id": _new_id(),
+            "kind": QUICK,
+            "store": clean(store) or None,
+            "state": SHOPPING,
+            "created": now,
+            "started": now,
+            "assignee": assignee or None,
+            "items": [],
+        }
+        self.quick_shops.append(shop)
+        return shop
+
+    def assign_shop(self, shop_id: str | None, assignee: str | None) -> dict[str, Any]:
+        """BR-ASSIGN-01: who's doing this shop (a person entity id), or nobody."""
+        shop = self._require_shop(shop_id)
+        shop["assignee"] = assignee or None
+        return shop
+
+    def start_shopping(self, store: str | None = None, shop_id: str | None = None) -> dict[str, Any]:
         """BR-SHOP-03: planning -> shopping, by hand."""
-        shop = self._require_shop()
+        shop = self._require_shop(shop_id)
         if clean(store):
             shop["store"] = clean(store)
         if shop["state"] == PLANNING:
@@ -430,16 +489,15 @@ class ShoppingModel:
             shop["started"] = self._ts()
         return shop
 
-    def set_store(self, store: str | None) -> dict[str, Any]:
+    def set_store(self, store: str | None, shop_id: str | None = None) -> dict[str, Any]:
         """BR-SHOP-05: optional store name; blank clears it."""
-        shop = self._require_shop()
+        shop = self._require_shop(shop_id)
         shop["store"] = clean(store) or None
         return shop
 
-    def cancel_shop(self) -> None:
-        """BR-SHOP-09: discard the open shop, planning or shopping; no history kept."""
-        self._require_shop()
-        self.data["shop"] = None
+    def cancel_shop(self, shop_id: str | None = None) -> None:
+        """BR-SHOP-09: discard an open shop, planning or shopping; no history kept."""
+        self._close(self._require_shop(shop_id))
 
     # -------------------------------------------------------------- history
 
@@ -468,9 +526,9 @@ class ShoppingModel:
             )
         return shop
 
-    def finish_shop(self) -> dict[str, Any]:
+    def finish_shop(self, shop_id: str | None = None) -> dict[str, Any]:
         """BR-SHOP-04/06/07: close the shop and record the summary."""
-        shop = self._require_shop()
+        shop = self._require_shop(shop_id)
         if shop["state"] != SHOPPING:
             raise ShoppingError("Shopping hasn't started yet. Start shopping first")
 
@@ -484,6 +542,8 @@ class ShoppingModel:
 
         record = {
             "id": shop["id"],
+            "kind": shop.get("kind", MAIN),
+            "assignee": shop.get("assignee"),
             "store": shop["store"],
             "created": shop["created"],
             "started": shop["started"],
@@ -495,22 +555,27 @@ class ShoppingModel:
         history = self.data["history"]
         history.append(record)
         del history[:-MAX_HISTORY]  # BR-HIST-01
-        self.data["shop"] = None
+        self._close(shop)
         self._fire(EVENT_SHOP_FINISHED, record)
         return record
 
     # ------------------------------------------------------------ shop items
 
-    def find_item(self, ref: str) -> dict[str, Any]:
-        """Find a shop item by id or name, preferring one that's still needed."""
-        shop = self._require_shop()
-        for item in shop["items"]:
-            if item["id"] == ref:
-                return item
+    def _locate(self, ref: str, shop_id: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+        """(shop, item) by item id in any open shop, else by name in the given
+        (or main) shop, preferring one that's still needed."""
+        for shop in self.open_shops:
+            for item in shop["items"]:
+                if item["id"] == ref:
+                    return shop, item
+        shop = self._require_shop(shop_id)
         matches = [i for i in shop["items"] if norm(i["name"]) == norm(ref)]
         if not matches:
             raise ShoppingError(f"'{ref}' isn't on the shop list")
-        return next((i for i in matches if i["state"] == NEEDED), matches[0])
+        return shop, next((i for i in matches if i["state"] == NEEDED), matches[0])
+
+    def find_item(self, ref: str, shop_id: str | None = None) -> dict[str, Any]:
+        return self._locate(ref, shop_id)[1]
 
     def add_item(
         self,
@@ -519,20 +584,26 @@ class ShoppingModel:
         note: str | None = None,
         aisle: str | None = None,
         qty: int | None = None,
-        remember: bool = True,
+        remember: bool | None = None,
+        shop_id: str | None = None,
     ) -> dict[str, Any]:
-        """BR-ITEM-01..04. Creates a shop if none is open (BR-SHOP-02).
+        """BR-ITEM-01..04. Creates a main shop if none is open (BR-SHOP-02).
 
         Catalogue items copy their aisle and note. Anything else is a one-off,
-        which is remembered as an occasional item (BR-OCC-02).
+        remembered as an occasional item (BR-OCC-02) - except on a quick shop,
+        unless asked (BR-QUICK-03).
         """
         name = clean(name)
         if not name:
             raise ShoppingError("A name is required")
         aisle_id = self.group_id(AISLES, aisle) if aisle else None
         qty = check_qty(qty) if qty is not None else None
-        if self.shop is None:
-            self.new_shop()
+        if shop_id:
+            target = self._require_shop(shop_id)
+        else:
+            target = self.shop or self.new_shop()
+        if remember is None:
+            remember = target.get("kind", MAIN) == MAIN
         entry = self.find_catalogue(name)
         if entry is None and remember:
             entry = self.add_catalogue_item(name, OCCASIONAL, aisle=aisle_id, note=note)
@@ -548,16 +619,18 @@ class ShoppingModel:
             "state_at": None,
             "added": self._ts(),
         }
-        self.shop["items"].append(item)  # BR-ITEM-02: duplicates allowed
+        target["items"].append(item)  # BR-ITEM-02: duplicates allowed
         return item
 
-    def add_items(self, entries: list[str | dict[str, Any]]) -> list[dict[str, Any]]:
+    def add_items(
+        self, entries: list[str | dict[str, Any]], shop_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Add several items; each is a name or {name, qty?, note?, aisle?}."""
         out = []
         for entry in entries:
             if isinstance(entry, str):
                 if clean(entry):
-                    out.append(self.add_item(entry))
+                    out.append(self.add_item(entry, shop_id=shop_id))
                 continue
             out.append(
                 self.add_item(
@@ -565,6 +638,7 @@ class ShoppingModel:
                     note=entry.get("note"),
                     aisle=entry.get("aisle"),
                     qty=entry.get("qty"),
+                    shop_id=shop_id,
                 )
             )
         return out
@@ -577,8 +651,9 @@ class ShoppingModel:
         note: str | None = None,
         aisle: str | None = None,
         qty: int | None = None,
+        shop_id: str | None = None,
     ) -> dict[str, Any]:
-        item = self.find_item(ref)
+        item = self.find_item(ref, shop_id)
         if qty is not None:
             item["qty"] = check_qty(qty)  # BR-QTY-03: the shop's amount only
         if name is not None:
@@ -594,11 +669,11 @@ class ShoppingModel:
                 entry["aisle"] = item["aisle"]
         return item
 
-    def set_item_state(self, ref: str, state: str) -> dict[str, Any]:
+    def set_item_state(self, ref: str, state: str, shop_id: str | None = None) -> dict[str, Any]:
         """BR-ITEM-05/06/07: any state to any state, in planning or shopping."""
         if state not in ITEM_STATES:
             raise ShoppingError(f"State must be one of {', '.join(ITEM_STATES)}")
-        item = self.find_item(ref)
+        shop, item = self._locate(ref, shop_id)
         if item["state"] == state:
             return item
         item["state"] = state
@@ -606,13 +681,13 @@ class ShoppingModel:
         if state == MISSING:
             self._fire(
                 EVENT_ITEM_MISSING,
-                {"item": item["name"], "store": self.shop["store"]},
+                {"item": item["name"], "store": shop["store"], "shop_id": shop["id"]},
             )
         return item
 
-    def remove_item(self, ref: str) -> None:
-        item = self.find_item(ref)
-        self.shop["items"].remove(item)
+    def remove_item(self, ref: str, shop_id: str | None = None) -> None:
+        shop, item = self._locate(ref, shop_id)
+        shop["items"].remove(item)
 
     def remove_items(self, item_ids: list[str]) -> None:
         shop = self._require_shop()
@@ -621,13 +696,12 @@ class ShoppingModel:
 
     def move_item(self, ref: str, after: str | None) -> None:
         """Reorder; after=None moves to the top (matches HA's to-do move API)."""
-        shop = self._require_shop()
-        item = self.find_item(ref)
+        shop, item = self._locate(ref)
         shop["items"].remove(item)
         if after is None:
             shop["items"].insert(0, item)
             return
-        anchor = self.find_item(after)
+        anchor = self.find_item(after, shop["id"])
         shop["items"].insert(shop["items"].index(anchor) + 1, item)
 
     def toggle_stock(self, ref: str, on: bool) -> None:
@@ -662,9 +736,9 @@ class ShoppingModel:
                 out.append({**group, "items": items})
         return out
 
-    def shop_by_aisle(self) -> list[dict[str, Any]]:
+    def shop_by_aisle(self, shop_id: str | None = None) -> list[dict[str, Any]]:
         """BR-ITEM-08: items grouped by aisle; done items drop to the bottom."""
-        shop = self._require_shop()
+        shop = self._require_shop(shop_id)
         out = []
         for group in self.groups(AISLES):
             items = [i for i in shop["items"] if i["aisle"] == group["id"]]
@@ -672,6 +746,14 @@ class ShoppingModel:
                 items.sort(key=lambda i: i["state"] != NEEDED)  # stable sort
                 out.append({**group, "items": [self.describe_shop_item(i) for i in items]})
         return out
+
+    def describe_shop(self, shop: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **shop,
+            # Items carry their catalogue details (icon, photo, kind).
+            "items": [self.describe_shop_item(i) for i in shop["items"]],
+            "by_aisle": self.shop_by_aisle(shop["id"]),
+        }
 
     def describe_catalogue_item(self, item: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -699,15 +781,8 @@ class ShoppingModel:
             "aisles": self.groups(AISLES),
             "catalogue": [self.describe_catalogue_item(c) for c in self.catalogue],
             "stock_check": self.stock_check(),
-            "shop": (
-                {
-                    **self.shop,
-                    # Items carry their catalogue details (icon, photo, kind).
-                    "items": [self.describe_shop_item(i) for i in self.shop["items"]],
-                    "by_aisle": self.shop_by_aisle(),
-                }
-                if self.shop
-                else None
-            ),
+            "shop": self.describe_shop(self.shop) if self.shop else None,
+            # Every open shop: the main one first, then quick shops (BR-QUICK-04).
+            "shops": [self.describe_shop(s) for s in self.open_shops],
             "last_shop": self.data["history"][-1] if self.data["history"] else None,
         }

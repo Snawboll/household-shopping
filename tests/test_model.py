@@ -381,3 +381,60 @@ def test_repeat_shop(model):  # BR-HIST-05
     ]
     with pytest.raises(m.ShoppingError, match="already open"):
         model.repeat_shop(record["id"])
+
+
+# ------------------------------------------------------------- quick shops
+
+def test_quick_shop_alongside_main(model):  # BR-QUICK-01/02/04
+    stock(model, "Milk", aisle="Dairy & Eggs")
+    main = model.new_shop()
+    model.add_item("Bread")
+    quick = model.new_quick_shop(store="Aldi", assignee="person.kelsie")
+    assert quick["state"] == m.SHOPPING and quick["started"] and quick["kind"] == m.QUICK
+    assert [s["id"] for s in model.open_shops] == [main["id"], quick["id"]]
+    model.add_item("Milk", shop_id=quick["id"])
+    model.add_item("Birthday card", shop_id=quick["id"])
+    assert len(main["items"]) == 1 and len(quick["items"]) == 2
+    # Catalogue items still link; one-offs aren't remembered on a quick shop (BR-QUICK-03).
+    assert quick["items"][0]["catalogue_id"] and quick["items"][0]["aisle"] == "dairy_eggs"
+    assert model.find_catalogue("Birthday card") is None
+    model.add_item("Balloons", shop_id=quick["id"], remember=True)
+    assert model.find_catalogue("Balloons")["kind"] == m.OCCASIONAL
+    # Items found by id in any open shop; by name within the given shop.
+    model.set_item_state(quick["items"][1]["id"], m.GOT)
+    model.set_item_state("Milk", m.MISSING, shop_id=quick["id"])
+    with pytest.raises(m.ShoppingError):
+        model.set_item_state("Milk", m.GOT)  # not on the main shop
+    record = model.finish_shop(quick["id"])
+    assert record["kind"] == m.QUICK and record["assignee"] == "person.kelsie"
+    assert record["store"] == "Aldi" and [i["name"] for i in record["missing"]] == ["Milk"]
+    assert model.shop is main and model.quick_shops == []
+
+
+def test_quick_shop_without_main_and_cancel(model):  # BR-QUICK-01, BR-SHOP-09
+    quick = model.new_quick_shop()
+    assert model.shop is None
+    model.add_item("Milk")  # no shop_id: opens a main shop, doesn't touch the quick one
+    assert model.shop is not None and quick["items"] == []
+    model.cancel_shop(quick["id"])
+    assert model.quick_shops == [] and model.shop is not None
+    with pytest.raises(m.ShoppingError, match="isn't open"):
+        model.finish_shop(quick["id"])
+
+
+def test_quick_shop_limit_and_assign(model):  # BR-QUICK-01, BR-ASSIGN-01
+    shops = [model.new_quick_shop() for _ in range(m.MAX_QUICK_SHOPS)]
+    with pytest.raises(m.ShoppingError):
+        model.new_quick_shop()
+    model.assign_shop(shops[0]["id"], "person.elijah")
+    assert shops[0]["assignee"] == "person.elijah"
+    model.assign_shop(shops[0]["id"], None)
+    assert shops[0]["assignee"] is None
+
+
+def test_normalise_adds_quick_shops():  # NFR-02
+    old = m.default_data()
+    del old["quick_shops"]
+    old["shop"] = {"id": "s", "store": None, "state": "planning", "created": "x", "started": None, "items": []}
+    data = m.normalise(old)
+    assert data["quick_shops"] == [] and data["shop"]["kind"] == m.MAIN and data["shop"]["assignee"] is None
