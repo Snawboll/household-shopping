@@ -85,6 +85,22 @@ const [base, token, out, cardJs] = process.argv.slice(2);
   await page.waitForTimeout(300);
   await shot("4-ticked");
 
+  // BR-CASH-01..03: 💵 adds cash out under Checkout; tapping it again opens the $10 stepper.
+  await click("[data-action=cash]");
+  await expect(/Checkout/, "cash out under Checkout");
+  const cashBadge = await row("Cash out").locator(".qty").textContent();
+  if (cashBadge.trim() !== "$100") throw new Error(`cash badge was ${cashBadge}`);
+  await click("[data-action=cash]");
+  await expect(/Couldn't get cash/, "cash out menu");
+  await card.locator('#dlg [data-delta="10"]').click();
+  await card.locator('#dlg [data-delta="10"]').click();
+  await page.waitForTimeout(300);
+  await shot("4b-cash-out");
+  await click("#dlg [data-action=close]");
+  await page.waitForTimeout(300);
+  await row("Cash out").locator("[data-state=got]").click();
+  await page.waitForTimeout(300);
+
   // Long press opens the item menu.
   const box = await row("Broccoli").locator(".txt").boundingBox();
   await page.mouse.move(box.x + 10, box.y + 10);

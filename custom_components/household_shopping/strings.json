@@ -196,6 +196,28 @@
         "shop_id": {
           "name": "Shop",
           "description": "Which open shop (its id). Leave out for the main shop."
+        },
+        "amount": {
+          "name": "Cash out amount",
+          "description": "Dollars, for the cash-out line only (1–1000)."
+        }
+      }
+    },
+    "add_cash_out": {
+      "name": "Add cash out",
+      "description": "Ask for cash out at the checkout. One per shop; asking again changes the amount.",
+      "fields": {
+        "amount": {
+          "name": "Amount",
+          "description": "Dollars (1–1000). Leave out to use the last amount."
+        },
+        "note": {
+          "name": "Note",
+          "description": "What it's for, e.g. the cleaner."
+        },
+        "shop_id": {
+          "name": "Shop",
+          "description": "Which open shop (its id). Leave out for the main shop."
         }
       }
     },

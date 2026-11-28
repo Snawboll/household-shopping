@@ -51,6 +51,8 @@ class ShopSensor(ShoppingEntity, SensorEntity):
             "needed": len(names(NEEDED)),
             "got": len(names(GOT)),
             "missing_items": names(MISSING),
+            # BR-CASH-04: the open shop's cash-out amount, or None.
+            "cash_out": next((i["amount"] for i in items if i.get("type") == "cash"), None),
             "last_shop_finished": last and last["finished"],
             "last_shop_missing": last and [i["name"] for i in last["missing"]],
             # BR-QUICK-05: open quick shops, e.g. for "remind me when I'm near Aldi".

@@ -312,3 +312,25 @@ async def test_snapshot_has_shops_and_people(hass, entry, hass_ws_client):  # BR
     event = (await ws.receive_json())["event"]
     assert [s["kind"] for s in event["shops"]] == ["main", "quick"]
     assert {p["entity_id"]: p["can_notify"] for p in event["people"]} == {"person.elijah": True, "person.kelsie": True}
+
+
+async def test_cash_out_through_services_and_todo(hass, entry):  # BR-CASH-01/04/05
+    await call(hass, "add_cash_out", amount=200, note="for the cleaner")
+    assert hass.states.get(SENSOR).attributes["cash_out"] == 200
+    items = await hass.services.async_call("todo", "get_items", {"entity_id": TODO}, blocking=True, return_response=True)
+    item = items[TODO]["items"][0]
+    assert item["summary"] == "Cash out" and item["description"] == "$200 · for the cleaner"
+    # Editing the note in the standard to-do list keeps the amount.
+    await hass.services.async_call(
+        "todo", "update_item", {"entity_id": TODO, "item": "Cash out", "description": "$200 · cleaner"}, blocking=True
+    )
+    await call(hass, "update_item", item="Cash out", amount=250)
+    data = snapshot(await call(hass, "get_catalogue", response=True))
+    cash = data["shop"]["items"][0]
+    assert cash["amount"] == 250 and cash["note"] == "cleaner"
+    with pytest.raises(ServiceValidationError):
+        await call(hass, "update_item", item="Cash out", qty=3)
+    await call(hass, "start_shopping")
+    await call(hass, "set_item_state", item="Cash out", state="got")
+    summary = await call(hass, "finish_shop", response=True)
+    assert summary[TODO]["cash_out"] == {"amount": 250, "state": "got", "note": "cleaner"}

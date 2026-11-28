@@ -55,7 +55,7 @@ Home locations and aisles come with sensible defaults, and you can rename and re
 
 All of these target `todo.shopping`.
 
-**Shop:** `new_shop(store?, items?)` (items: names or `{name, qty, note}`) · `start_shopping(store?)` · `finish_shop` (returns the summary) · `new_quick_shop(store?, assignee?, items?)` · `assign_shop(shop_id, assignee)` · `remind_shop(shop_id)` · `cancel_shop` (planning or shopping) · `repeat_shop(shop_id)` · `add_item(name, note?, aisle?, qty?)` · `update_item` · `set_item_state(item, needed|got|missing)` · `remove_item` · `toggle_stock(name, on)` · `get_history(limit)`
+**Shop:** `new_shop(store?, items?)` (items: names or `{name, qty, note}`) · `start_shopping(store?)` · `finish_shop` (returns the summary) · `new_quick_shop(store?, assignee?, items?)` · `assign_shop(shop_id, assignee)` · `remind_shop(shop_id)` · `cancel_shop` (planning or shopping) · `repeat_shop(shop_id)` · `add_item(name, note?, aisle?, qty?)` · `add_cash_out(amount?, note?)` (one per shop, e.g. cash for the cleaner) · `update_item` (incl. `amount` for cash out) · `set_item_state(item, needed|got|missing)` · `remove_item` · `toggle_stock(name, on)` · `get_history(limit)`
 
 **Catalogue:** `add_stock_item(name, location?, aisle?, note?, icon?)` · `add_occasional_item` · `update_catalogue_item` · `promote_to_stock` · `demote_to_occasional` · `remove_catalogue_item` · `import_catalogue(items)` (bulk, all or nothing) · `get_catalogue` (returns everything) · `set_item_image(name, image_url | image_data, source, attribution?)` · `clear_item_image`
 

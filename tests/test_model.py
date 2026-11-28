@@ -438,3 +438,92 @@ def test_normalise_adds_quick_shops():  # NFR-02
     old["shop"] = {"id": "s", "store": None, "state": "planning", "created": "x", "started": None, "items": []}
     data = m.normalise(old)
     assert data["quick_shops"] == [] and data["shop"]["kind"] == m.MAIN and data["shop"]["assignee"] is None
+
+
+# ---------------------------------------------------------------- cash out
+
+
+def test_cash_out_is_one_line_with_an_amount(model):  # BR-CASH-01
+    model.new_shop()
+    cash = model.add_cash_out(200, note="for the cleaner")
+    assert cash["type"] == m.CASH and cash["amount"] == 200 and cash["note"] == "for the cleaner"
+    assert cash["catalogue_id"] is None and not model.catalogue  # never remembered
+    again = model.add_cash_out(150)
+    assert again is cash and cash["amount"] == 150
+    assert len([i for i in model.shop["items"] if i.get("type") == m.CASH]) == 1
+    for bad in (0, 1001, 12.5, "lots", True):
+        with pytest.raises(m.ShoppingError):
+            model.add_cash_out(bad)
+    assert model.add_cash_out("$300")["amount"] == 300
+
+
+def test_cash_out_cannot_take_quantity_aisle_or_go_on_other_items(model):  # BR-CASH-01
+    model.new_shop()
+    model.add_item("Milk")
+    model.add_cash_out(200)
+    with pytest.raises(m.ShoppingError):
+        model.update_item("Cash out", qty=2)
+    with pytest.raises(m.ShoppingError):
+        model.update_item("Cash out", aisle="Dairy & Eggs")
+    with pytest.raises(m.ShoppingError):
+        model.update_item("Milk", amount=50)
+    assert model.update_item("Cash out", amount=250, note="cleaner")["amount"] == 250
+
+
+def test_cash_out_defaults_to_last_amount(model):  # BR-CASH-02
+    model.new_shop()
+    assert model.add_cash_out()["amount"] == m.DEFAULT_CASH
+    model.update_item("Cash out", amount=200)
+    model.cancel_shop()
+    model.new_shop()
+    assert model.add_cash_out()["amount"] == 200
+
+
+def test_cash_out_opens_a_shop_and_works_on_quick_shops(model):  # BR-CASH-01, BR-SHOP-02
+    assert model.add_cash_out(50)["amount"] == 50
+    assert model.shop is not None
+    quick = model.new_quick_shop("Aldi")
+    model.add_cash_out(80, shop_id=quick["id"])
+    assert [i["amount"] for i in quick["items"]] == [80]
+    assert [i["amount"] for i in model.shop["items"]] == [50]
+
+
+def test_cash_out_listed_last_under_checkout(model):  # BR-CASH-03
+    stock(model, "Milk")
+    model.new_shop()
+    model.add_cash_out(200)
+    model.add_item("Milk")
+    groups = model.shop_by_aisle()
+    assert groups[-1]["id"] == m.CHECKOUT_ID and groups[-1]["name"] == "Checkout"
+    assert [i["name"] for i in groups[-1]["items"]] == ["Cash out"]
+    assert all(i.get("type") != m.CASH for g in groups[:-1] for i in g["items"])
+    described = groups[-1]["items"][0]
+    assert described["icon"] == m.CASH_ICON and described["aisle_name"] == "Checkout"
+    # An aisle the user happens to call "Checkout" doesn't swallow it twice.
+    model.add_group(m.AISLES, "Checkout")
+    assert sum(len(g["items"]) for g in model.shop_by_aisle()) == 2
+    model.set_item_state("Cash out", m.GOT)
+    assert model.find_item("Cash out")["state"] == m.GOT
+
+
+def test_cash_out_recorded_on_finish_and_repeated(model, events):  # BR-CASH-04, BR-CASH-05
+    model.new_shop("Woolworths Woden")
+    model.add_item("Milk")
+    model.add_cash_out(200, note="cleaner")
+    model.start_shopping()
+    model.set_item_state("Milk", m.GOT)
+    model.set_item_state("Cash out", m.GOT)
+    record = model.finish_shop()
+    assert record["cash_out"] == {"amount": 200, "state": m.GOT, "note": "cleaner"}
+    assert [i["name"] for i in record["got"]] == ["Milk"]  # cash isn't a grocery
+    assert events[-1][1]["cash_out"]["amount"] == 200
+    model.repeat_shop(record["id"])
+    cash = model.find_item("Cash out")
+    assert cash["amount"] == 200 and cash["note"] == "cleaner" and cash["state"] == m.NEEDED
+
+
+def test_shop_without_cash_out_records_none(model):  # BR-CASH-04
+    model.new_shop()
+    model.add_item("Milk")
+    model.start_shopping()
+    assert model.finish_shop()["cash_out"] is None

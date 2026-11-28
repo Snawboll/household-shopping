@@ -22,6 +22,7 @@ from .model import (
     ITEM_STATES,
     KINDS,
     LOCATIONS,
+    MAX_CASH,
     OCCASIONAL,
     STOCK,
     ShoppingError,
@@ -34,6 +35,7 @@ Handler = Callable[[ShoppingManager, dict[str, Any]], Any]
 
 opt_str = vol.Any(None, cv.string)
 QTY = vol.All(vol.Coerce(int), vol.Range(min=1, max=99))
+AMOUNT = vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_CASH))
 
 SHOP_ITEM = vol.Any(
     cv.string,
@@ -231,6 +233,14 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
         ),
         SupportsResponse.NONE,
     ),
+    "add_cash_out": (
+        {vol.Optional("amount"): AMOUNT, vol.Optional("note"): cv.string, **SHOP_ID},
+        _sync(
+            lambda m, d: m.add_cash_out(d.get("amount"), note=d.get("note"), shop_id=d.get("shop_id"))
+            and None
+        ),
+        SupportsResponse.NONE,
+    ),
     "update_item": (
         {
             vol.Required("item"): cv.string,
@@ -238,6 +248,7 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
             vol.Optional("note"): cv.string,
             vol.Optional("aisle"): cv.string,
             vol.Optional("qty"): QTY,
+            vol.Optional("amount"): AMOUNT,
             **SHOP_ID,
         },
         _sync(
@@ -247,6 +258,7 @@ SERVICES: dict[str, tuple[dict, Handler | Callable[..., Awaitable[Any]], Support
                 note=d.get("note"),
                 aisle=d.get("aisle"),
                 qty=d.get("qty"),
+                amount=d.get("amount"),
                 shop_id=d.get("shop_id"),
             )
             and None

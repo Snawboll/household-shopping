@@ -42,6 +42,15 @@ MAX_QUICK_SHOPS = 5
 MAIN = "main"
 QUICK = "quick"
 
+# §5b cash out: one line per shop asking for cash at the checkout.
+CASH = "cash"
+CASH_NAME = "Cash out"
+CASH_ICON = "💵"
+CHECKOUT_ID = "checkout"
+CHECKOUT_NAME = "Checkout"
+MAX_CASH = 1000
+DEFAULT_CASH = 100
+
 IMAGE_SOURCES = ("own", "openfoodfacts", "other")
 
 EVENT_SHOP_FINISHED = "shop_finished"
@@ -96,6 +105,25 @@ def check_qty(qty: Any) -> int:
     if not 1 <= value <= MAX_QTY:
         raise ShoppingError(f"Quantity must be between 1 and {MAX_QTY}")
     return value
+
+
+def check_amount(amount: Any) -> int:
+    """BR-CASH-01: whole dollars from 1 to MAX_CASH."""
+    if isinstance(amount, float) and amount.is_integer():
+        value = int(amount)
+    elif isinstance(amount, str) and amount.strip().lstrip("$").isdigit():
+        value = int(amount.strip().lstrip("$"))
+    elif isinstance(amount, int) and not isinstance(amount, bool):
+        value = amount
+    else:
+        raise ShoppingError("Cash out must be a whole number of dollars")
+    if not 1 <= value <= MAX_CASH:
+        raise ShoppingError(f"Cash out must be between $1 and ${MAX_CASH}")
+    return value
+
+
+def is_cash(item: dict[str, Any]) -> bool:
+    return item.get("type") == CASH
 
 
 def normalise(data: dict[str, Any]) -> dict[str, Any]:
@@ -524,6 +552,8 @@ class ShoppingModel:
                 catalogue["name"] if catalogue else entry["name"],
                 qty=entry.get("qty", 1),
             )
+        if cash := record.get("cash_out"):  # BR-CASH-05
+            self.add_cash_out(cash["amount"], note=cash.get("note"), shop_id=shop["id"])
         return shop
 
     def finish_shop(self, shop_id: str | None = None) -> dict[str, Any]:
@@ -537,8 +567,10 @@ class ShoppingModel:
                 # BR-HIST-03, BR-QTY-04
                 {"name": i["name"], "qty": i.get("qty", 1), "catalogue_id": i.get("catalogue_id")}
                 for i in shop["items"]
-                if i["state"] == state
+                if i["state"] == state and not is_cash(i)
             ]
+
+        cash = next((i for i in shop["items"] if is_cash(i)), None)
 
         record = {
             "id": shop["id"],
@@ -551,6 +583,9 @@ class ShoppingModel:
             "missing": entries(MISSING),
             "got": entries(GOT),
             "not_got": entries(NEEDED),
+            # BR-CASH-04: what cash was asked for, and whether it was got.
+            "cash_out": cash
+            and {"amount": cash["amount"], "state": cash["state"], "note": cash.get("note", "")},
         }
         history = self.data["history"]
         history.append(record)
@@ -643,6 +678,45 @@ class ShoppingModel:
             )
         return out
 
+    def add_cash_out(
+        self,
+        amount: int | None = None,
+        *,
+        note: str | None = None,
+        shop_id: str | None = None,
+    ) -> dict[str, Any]:
+        """BR-CASH-01/02: one cash-out line per shop. Asking again updates it.
+
+        Creates a main shop if none is open, like add_item (BR-SHOP-02).
+        """
+        amount = check_amount(amount) if amount is not None else None
+        target = self._require_shop(shop_id) if shop_id else (self.shop or self.new_shop())
+        existing = next((i for i in target["items"] if is_cash(i)), None)
+        if existing:
+            if amount is not None:
+                existing["amount"] = amount
+            if note is not None:
+                existing["note"] = clean(note)
+            self.data["cash_amount"] = existing["amount"]
+            return existing
+        amount = amount or self.data.get("cash_amount") or DEFAULT_CASH
+        item = {
+            "id": _new_id(),
+            "type": CASH,
+            "name": CASH_NAME,
+            "note": clean(note) if note else "",
+            "aisle": CHECKOUT_ID,
+            "catalogue_id": None,
+            "qty": 1,
+            "amount": amount,
+            "state": NEEDED,
+            "state_at": None,
+            "added": self._ts(),
+        }
+        target["items"].append(item)
+        self.data["cash_amount"] = amount  # BR-CASH-02: remembered for next time
+        return item
+
     def update_item(
         self,
         ref: str,
@@ -651,9 +725,24 @@ class ShoppingModel:
         note: str | None = None,
         aisle: str | None = None,
         qty: int | None = None,
+        amount: int | None = None,
         shop_id: str | None = None,
     ) -> dict[str, Any]:
         item = self.find_item(ref, shop_id)
+        if is_cash(item):
+            # BR-CASH-01: cash out has an amount, not a quantity, aisle or new name.
+            if qty is not None and qty != 1:
+                raise ShoppingError("Cash out has an amount, not a quantity")
+            if aisle is not None:
+                raise ShoppingError("Cash out always goes at the checkout")
+            if amount is not None:
+                item["amount"] = check_amount(amount)
+                self.data["cash_amount"] = item["amount"]
+            if note is not None:
+                item["note"] = clean(note)
+            return item
+        if amount is not None:
+            raise ShoppingError("Only cash out has an amount")
         if qty is not None:
             item["qty"] = check_qty(qty)  # BR-QTY-03: the shop's amount only
         if name is not None:
@@ -741,10 +830,14 @@ class ShoppingModel:
         shop = self._require_shop(shop_id)
         out = []
         for group in self.groups(AISLES):
-            items = [i for i in shop["items"] if i["aisle"] == group["id"]]
+            items = [i for i in shop["items"] if i["aisle"] == group["id"] and not is_cash(i)]
             if items:
                 items.sort(key=lambda i: i["state"] != NEEDED)  # stable sort
                 out.append({**group, "items": [self.describe_shop_item(i) for i in items]})
+        # BR-CASH-03: cash out comes last, under its own Checkout heading.
+        cash = [self.describe_shop_item(i) for i in shop["items"] if is_cash(i)]
+        if cash:
+            out.append({"id": CHECKOUT_ID, "name": CHECKOUT_NAME, "icon": CASH_ICON, "items": cash})
         return out
 
     def describe_shop(self, shop: dict[str, Any]) -> dict[str, Any]:
@@ -765,6 +858,8 @@ class ShoppingModel:
         }
 
     def describe_shop_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        if is_cash(item):
+            return {**item, "icon": CASH_ICON, "image": None, "kind": CASH, "aisle_name": CHECKOUT_NAME}
         entry = self.find_catalogue(item.get("catalogue_id"))
         return {
             **item,

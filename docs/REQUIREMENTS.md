@@ -1,6 +1,6 @@
 # Household Shopping: Requirements & Business Rules
 
-**Status:** v1.4, agreed (v1.1 images and receipt import; v1.2 quantities; v1.3 discard mid-shop, tap-to-menu, history tab; v1.4 quick shops and assignment). Changes from here on are made by editing this file, with a note in the commit.
+**Status:** v1.4, agreed (v1.1 images and receipt import; v1.2 quantities; v1.3 discard mid-shop, tap-to-menu, history tab; v1.4 quick shops and assignment; v1.5 cash out). Changes from here on are made by editing this file, with a note in the commit.
 
 `MUST`, `SHOULD` and `MAY` are used as in RFC 2119. Rule IDs are referred to in tests and commits.
 
@@ -161,6 +161,18 @@ The integration itself doesn't read receipts. Reading a receipt is done by an AI
 | BR-QTY-06 | In the card, a ticked stock item shows a −/＋ stepper; while shopping, a quantity over 1 shows as a "×5" badge before the name; the long-press menu has a stepper. |
 | BR-QTY-07 | *(Later)* Partly got, e.g. 3 of 5 bananas. For now an item is got or missing as a whole; note the shortfall in the note. |
 
+## 5b. Cash out
+
+*(Owner request, v1.5: "Add an option for a cash out request to the shopping list, that way it can be marked with a quantity." The household pays its cleaner in cash taken out at the supermarket checkout. Recording it on the shop keeps the shopper from forgetting it, and lets a finance tool tell groceries from cash in the card payment.)*
+
+| ID | Rule |
+|---|---|
+| BR-CASH-01 | A shop (main or quick) MAY have **one cash-out line**: a request for cash at the checkout. Its "quantity" is an **amount in whole dollars**, from $1 to $1,000, and it MAY have a note ("for the cleaner"). It has no aisle, catalogue entry or photo, and asking for cash out again changes the existing line rather than adding a second one. |
+| BR-CASH-02 | A new cash-out line starts at the **last amount used** (the first one is $100), unless an amount is given. |
+| BR-CASH-03 | Cash out is listed last, under its own **Checkout** heading, with its amount where a quantity would be ("$200"). It is ticked ✓ got or ✗ missing like any item. In the card, a 💵 button next to the add box adds it (or opens it if it's already there), and its menu has a $10 stepper. |
+| BR-CASH-04 | Finishing records `cash_out: {amount, state, note}` in the shop summary, the history and the `household_shopping_shop_finished` event, separately from the got/missing/not-got lists. The shop sensor shows the open shop's amount as `cash_out`. |
+| BR-CASH-05 | **Shop again** repeats the cash out at the same amount. In HA's standard to-do list it shows as "Cash out" with the amount at the start of the description ("$200 · for the cleaner"), and editing the description there keeps the amount. Service: `add_cash_out(amount?, note?, shop_id?)`; `update_item(item, amount)` changes it. |
+
 ## 6. History
 
 | ID | Rule |
@@ -193,7 +205,7 @@ HA's to-do entities have only two states (`needs_action` and `completed`), and t
 | `sensor.<name>_shop` | `none` / `planning` / `shopping`, with attributes for store, counts and the last summary. |
 
 ### 7.4 Services
-Shops: `new_shop(store?, items?)` (items are names or `{name, qty, note, aisle}`), `new_quick_shop(store?, assignee?, items?)`, `assign_shop(shop_id, assignee)`, `remind_shop(shop_id)`, `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `repeat_shop(shop_id)`, `add_item(name, aisle?, note?, qty?, remember?)`, `set_item_state(item, state)`, `get_history(limit)`. Shop actions take an optional `shop_id`; without it they act on the main shop.
+Shops: `new_shop(store?, items?)` (items are names or `{name, qty, note, aisle}`), `new_quick_shop(store?, assignee?, items?)`, `assign_shop(shop_id, assignee)`, `remind_shop(shop_id)`, `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `repeat_shop(shop_id)`, `add_item(name, aisle?, note?, qty?, remember?)`, `add_cash_out(amount?, note?)`, `update_item(item, name?, note?, aisle?, qty?, amount?)`, `set_item_state(item, state)`, `get_history(limit)`. Shop actions take an optional `shop_id`; without it they act on the main shop.
 
 Catalogue: `add_stock_item(name, location?, aisle?, note?, icon?)`, `add_occasional_item(name, aisle?, note?)`, `update_catalogue_item(name, new_name?, location?, aisle?, note?)`, `promote_to_stock(name, location?)`, `demote_to_occasional(name)`, `remove_catalogue_item(name)`, `import_catalogue(items, kind)` for bulk loading, `set_item_image(name, image_url? | image_data?, source?, attribution?)`, `clear_item_image(name)`, and `get_catalogue()` (returns data, including whether each item has a photo).
 

@@ -114,3 +114,4 @@ async def test_card_end_to_end(socket_enabled, hass, entry, aiohttp_client, hass
     assert len(last["not_got"]) == 2  # Birthday candles was removed mid-shop
     qty = {i["name"]: i["qty"] for i in last["got"] + last["missing"]}
     assert qty["Full cream milk"] == 3 and qty["Broccoli"] == 2  # BR-QTY-04
+    assert last["cash_out"] == {"amount": 120, "state": "got", "note": ""}  # BR-CASH-03/04

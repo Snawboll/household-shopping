@@ -130,6 +130,32 @@ update_item:
     qty:
       selector: *id006
       example: 2
+    amount:
+      selector:
+        number:
+          min: 1
+          max: 1000
+          step: 10
+          mode: box
+          unit_of_measurement: $
+      example: 200
+    shop_id:
+      selector: *id004
+add_cash_out:
+  target: *id001
+  fields:
+    amount:
+      selector:
+        number:
+          min: 1
+          max: 1000
+          step: 10
+          mode: box
+          unit_of_measurement: $
+      example: 200
+    note:
+      selector: *id005
+      example: For the cleaner
     shop_id:
       selector: *id004
 set_item_state:

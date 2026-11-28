@@ -14,7 +14,7 @@ const DOMAIN = "household_shopping";
 const VERSION = "0.6.0";
 const LONG_PRESS_MS = 450;
 // Actions that work on one open shop: the card sends the one being viewed (BR-QUICK-04).
-const SHOP_SCOPED = new Set([
+const SHOP_SCOPED = new Set(["add_cash_out", 
   "start_shopping", "set_store", "finish_shop", "cancel_shop", "add_item", "update_item",
   "set_item_state", "remove_item", "assign_shop", "remind_shop",
 ]);
@@ -304,7 +304,23 @@ class HouseholdShoppingCard extends HTMLElement {
   }
 
   _qty(item) {
+    if (item.type === "cash") return `<span class="qty">$${item.amount}</span>`; // BR-CASH-03
     return (item.qty || 1) > 1 ? `<span class="qty">×${item.qty}</span>` : "";
+  }
+
+  /** Cash out changes in $10 steps (BR-CASH-03). */
+  _amountStepper(item, big = false) {
+    return `<span class="step ${big ? "big" : ""}">
+      <button data-action="amount" data-id="${esc(item.id)}" data-delta="-10" ${item.amount <= 10 ? "disabled" : ""} aria-label="Less">−</button>
+      <b>$${item.amount}</b>
+      <button data-action="amount" data-id="${esc(item.id)}" data-delta="10" ${item.amount >= 1000 ? "disabled" : ""} aria-label="More">＋</button>
+    </span>`;
+  }
+
+  /** " ×5" or " $200" after a name in pills. */
+  _pillAmount(i) {
+    if (i.type === "cash") return ` $${i.amount}`;
+    return (i.qty || 1) > 1 ? ` ×${i.qty}` : "";
   }
 
   _stepper(item, big = false) {
@@ -380,7 +396,8 @@ class HouseholdShoppingCard extends HTMLElement {
         bar.innerHTML = `
           <input id="add" list="names" placeholder="Add an item…" autocomplete="off" enterkeyhint="done" data-enter="add">
           <datalist id="names"></datalist>
-          <button class="btn primary" data-action="add" aria-label="Add">＋</button>`;
+          <button class="btn primary" data-action="add" aria-label="Add">＋</button>
+          <button class="btn" data-action="cash" aria-label="Cash out" title="Cash out">💵</button>`;
       } else if (mode === "catalogue") {
         bar.innerHTML = `<input id="search" type="search" placeholder="Search catalogue…" value="${esc(this._search)}">`;
       } else {
@@ -434,6 +451,7 @@ class HouseholdShoppingCard extends HTMLElement {
       list.length ? `<div class="pills">${list.map((i) => `<span class="pill ${cls}">${esc(i.name)}${(i.qty || 1) > 1 ? ` ×${i.qty}` : ""}</span>`).join("")}</div>` : "<div class='meta'>None</div>";
     return `<div class="panel">
       ${title ? `<h3>${esc(title)} · ${esc(fmtDate(s.finished))}${s.store ? ` · ${esc(s.store)}` : ""}</h3>` : ""}
+      ${s.cash_out ? `<div class="meta" style="margin-top:6px">💵 Cash out $${s.cash_out.amount} · ${s.cash_out.state === "got" ? "✓ got" : s.cash_out.state === "missing" ? "✗ not available" : "not got"}${s.cash_out.note ? ` · ${esc(s.cash_out.note)}` : ""}</div>` : ""}
       <div style="font-weight:600;margin:8px 0 6px">❌ Missing (${s.missing.length})</div>${pills(s.missing, "miss")}
       ${s.not_got.length ? `<div style="font-weight:600;margin:12px 0 6px">⏭ Not got (${s.not_got.length})</div>${pills(s.not_got)}` : ""}
       ${gotList
@@ -472,7 +490,7 @@ class HouseholdShoppingCard extends HTMLElement {
     html += `<div class="panel"><h3>On this shop (${items.length})</h3>${
       items.length
         ? `<div class="pills">${items
-            .map((i) => `<span class="pill ${i.state === "missing" ? "miss" : ""}">${esc(i.name)}${(i.qty || 1) > 1 ? ` ×${i.qty}` : ""}<button data-action="remove" data-id="${esc(i.id)}" aria-label="Remove">✕</button></span>`)
+            .map((i) => `<span class="pill ${i.state === "missing" ? "miss" : ""}" ${i.type === "cash" ? `data-press="${esc(i.id)}"` : ""}>${i.type === "cash" ? "💵 " : ""}${esc(i.name)}${this._pillAmount(i)}<button data-action="remove" data-id="${esc(i.id)}" aria-label="Remove">✕</button></span>`)
             .join("")}</div>`
         : `<div class="meta">Tick what's run out below, or add anything else above.</div>`
     }</div>`;
@@ -696,6 +714,25 @@ class HouseholdShoppingCard extends HTMLElement {
         return this._call("toggle_stock", { name: this._cat(id)?.name ?? id, on: el.dataset.on !== "1" });
       case "remove":
         return this._call("remove_item", { item: id });
+      case "cash": {
+        // BR-CASH-01: one per shop; if there is one already, open it to change the amount.
+        const existing = this._cur?.items.find((i) => i.type === "cash");
+        if (existing) return this._itemMenu(existing);
+        if (await this._call("add_cash_out")) this._toast("Cash out added. Tap it to change the amount");
+        return;
+      }
+      case "amount": {
+        const item = this._shopItem(id);
+        if (!item) return;
+        const amount = Math.max(10, Math.min(1000, item.amount + Number(el.dataset.delta)));
+        if (amount === item.amount) return;
+        item.amount = amount; // optimistic, so quick taps add up
+        const b = el.parentElement.querySelector("b");
+        if (b) b.textContent = `$${amount}`;
+        el.parentElement.querySelector('[data-delta="-10"]').disabled = amount <= 10;
+        el.parentElement.querySelector('[data-delta="10"]').disabled = amount >= 1000;
+        return this._call("update_item", { item: id, amount });
+      }
       case "qty": {
         const item = this._shopItem(id);
         if (!item) return;
@@ -894,6 +931,23 @@ class HouseholdShoppingCard extends HTMLElement {
     const opt = (action, icon, label, extra = "") =>
       `<button data-action="${action}" data-id="${id}" ${extra}><span style="width:28px;text-align:center">${icon}</span>${label}</button>`;
     const isStock = item.kind === "stock";
+    if (item.type === "cash") {
+      // BR-CASH-03: amount stepper; no aisle, stock or photo options.
+      this._openSheet(`
+      <div class="photo">${this._pic(item)}<div><h2>Cash out</h2><div class="sub">At the checkout${item.note ? ` · ${esc(item.note)}` : ""}</div></div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px">
+        <span>Amount</span>${this._amountStepper(item, true)}
+      </div>
+      <div class="menu">
+        ${item.state !== "got" ? opt("sheet-state", "✓", "Got the cash", 'data-state="got"') : ""}
+        ${item.state !== "missing" ? opt("sheet-state", "✗", "Couldn't get cash", 'data-state="missing"') : ""}
+        ${item.state !== "needed" ? opt("sheet-state", "↺", "Still needed", 'data-state="needed"') : ""}
+        ${opt("sheet-note", "✎", "Edit note (e.g. for the cleaner)")}
+        ${opt("sheet-remove", "🗑", "Remove cash out")}
+      </div>
+      <div class="row2"><button class="btn" data-action="close">Close</button></div>`);
+      return;
+    }
     this._openSheet(`
       <div class="photo">${this._pic(item)}<div><h2>${this._qty(item)}${esc(item.name)}</h2><div class="sub">${esc(item.aisle_name)}${item.note ? ` · ${esc(item.note)}` : ""}</div></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px">

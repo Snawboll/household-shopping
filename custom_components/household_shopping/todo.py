@@ -21,7 +21,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import ShoppingConfigEntry
 from .const import MISSING_LABEL
 from .entity import ShoppingEntity
-from .model import GOT, MISSING, NEEDED
+from .model import CASH, GOT, MISSING, NEEDED
 
 
 async def async_setup_entry(
@@ -33,6 +33,7 @@ async def async_setup_entry(
 
 
 _QTY_PREFIX = re.compile(r"^×\s*\d+\s*·?\s*")
+_CASH_PREFIX = re.compile(r"^\$\s*\d+\s*·?\s*")
 
 
 def _description(item: dict) -> str | None:
@@ -40,7 +41,9 @@ def _description(item: dict) -> str | None:
     parts = []
     if item["state"] == MISSING:
         parts.append(MISSING_LABEL)
-    if item.get("qty", 1) > 1:
+    if item.get("type") == CASH:  # BR-CASH-05: "$200 · for the cleaner"
+        parts.append(f"${item['amount']}")
+    elif item.get("qty", 1) > 1:
         parts.append(f"×{item['qty']}")
     if item.get("note"):
         parts.append(item["note"])
@@ -52,6 +55,7 @@ def _note_from(description: str | None) -> str:
     text = (description or "").strip()
     if text.startswith(MISSING_LABEL):
         text = text[len(MISSING_LABEL):].lstrip(" ·").strip()
+    text = _CASH_PREFIX.sub("", text)
     return _QTY_PREFIX.sub("", text).strip()
 
 
