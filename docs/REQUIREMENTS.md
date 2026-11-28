@@ -193,7 +193,7 @@ HA's to-do entities have only two states (`needs_action` and `completed`), and t
 | `sensor.<name>_shop` | `none` / `planning` / `shopping`, with attributes for store, counts and the last summary. |
 
 ### 7.4 Services
-Shops: `new_shop(store?, items?)`, `new_quick_shop(store?, assignee?, items?)`, `assign_shop(shop_id, assignee)`, `remind_shop(shop_id)`; shop actions take an optional `shop_id` (items are names or `{name, qty, note, aisle}`), `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `repeat_shop(shop_id)`, `add_item(name, aisle?, note?, qty?)`, `set_item_state(item, state)`, `get_history(limit)`.
+Shops: `new_shop(store?, items?)` (items are names or `{name, qty, note, aisle}`), `new_quick_shop(store?, assignee?, items?)`, `assign_shop(shop_id, assignee)`, `remind_shop(shop_id)`, `start_shopping(store?)`, `finish_shop()` (returns the summary), `cancel_shop()`, `repeat_shop(shop_id)`, `add_item(name, aisle?, note?, qty?, remember?)`, `set_item_state(item, state)`, `get_history(limit)`. Shop actions take an optional `shop_id`; without it they act on the main shop.
 
 Catalogue: `add_stock_item(name, location?, aisle?, note?, icon?)`, `add_occasional_item(name, aisle?, note?)`, `update_catalogue_item(name, new_name?, location?, aisle?, note?)`, `promote_to_stock(name, location?)`, `demote_to_occasional(name)`, `remove_catalogue_item(name)`, `import_catalogue(items, kind)` for bulk loading, `set_item_image(name, image_url? | image_data?, source?, attribution?)`, `clear_item_image(name)`, and `get_catalogue()` (returns data, including whether each item has a photo).
 
